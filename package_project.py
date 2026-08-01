@@ -7,7 +7,7 @@ logger = logging.getLogger("nucleus.packager")
 
 def zip_project():
     zip_name = "nucleus_submission.zip"
-    exclude_dirs = {".git", "venv", ".pytest_cache", "__pycache__", "cache"}
+    exclude_dirs = {".git", "venv", ".pytest_cache", "__pycache__", "cache", "scratch"}
     exclude_files = {".env", zip_name}
     
     logger.info(f"Creating submission package archive: {zip_name}...")
