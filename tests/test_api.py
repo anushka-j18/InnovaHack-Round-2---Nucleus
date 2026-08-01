@@ -55,8 +55,8 @@ def test_compress_endpoint_without_qa():
     assert "compressed_text" in res_json
     assert "compression_ratio" in res_json
     assert res_json["accuracy_retained"] is None
-    assert res_json["latency_speedup_ratio"] == 3.4
-    assert res_json["latency_speedup_is_estimated"] is True
+    assert res_json["latency_speedup_ratio"] is None
+    assert res_json["latency_speedup_is_estimated"] is None
 
 def test_compress_endpoint_empty_text():
     """Verify API handles empty text gracefully, returning empty compression results."""

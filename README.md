@@ -1,6 +1,6 @@
 # Nucleus Backend - Context Compression Engine
 
-Nucleus is an ultra-low-resource context compression engine designed to shrink LLM prompts by over 70% while maintaining >95% reasoning accuracy, enabling rapid, cost-effective inference on large codebases, customer logs, and prose contexts with persistent Supabase PostgreSQL analytics storage.
+Nucleus is an ultra-low-resource context compression engine designed to shrink LLM prompts by over 70% while maintaining >95% reasoning accuracy, enabling rapid, cost-effective inference on large codebases, customer logs, and prose contexts.
 
 ---
 
@@ -9,94 +9,114 @@ Ensure you have Python 3.10+ installed on your machine.
 
 ---
 
-## ⚙️ 1. Environment & Supabase Setup
+## ⚙️ 1. Environment Setup
 
-### 1. Create Supabase Project
-1. Log into [Supabase Console](https://supabase.com/dashboard) and create a new project.
-2. Under **Project Settings -> API**, obtain your **`SUPABASE_URL`** and **`SUPABASE_KEY`** (anon key or service_role key).
-3. Under **Project Settings -> Database -> Connection string**, select **URI (Transaction Pooler or Direct)** and copy your PostgreSQL connection string:
-   ```env
-   postgresql://postgres.[YOUR-PROJECT-ID]:[YOUR-PASSWORD]@aws-0-[REGION].pooler.supabase.com:6543/postgres
-   ```
+If you haven't already set up the virtual environment, run the following commands:
 
-### 2. Configure Environment Variables
-Copy `.env.template` to `.env` and fill in your keys:
-```bash
-cp .env.template .env
-```
-Example `.env`:
-```env
-GROQ_API_KEY=your_groq_key
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_KEY=your_supabase_anon_key
-SUPABASE_DB_URL=postgresql://postgres.xxx:password@aws-0-region.pooler.supabase.com:6543/postgres
-```
-
-### 3. Install Dependencies
-```bash
+```powershell
+# Create virtual environment
 python -m venv venv
-source venv/bin/activate  # On Windows: .\venv\Scripts\activate
+
+# Activate virtual environment
+.\venv\Scripts\activate
+
+# Install minimalist local dependencies
 pip install -r requirements.txt
 ```
 
 ---
 
-## 🗄️ 2. Database Migrations (Alembic)
-
-Run Alembic migrations to create all database tables (`compression_jobs`, `evaluation_results`, `history_records`) and indexes in Supabase PostgreSQL:
-
-```bash
-# Apply migrations to your Supabase PostgreSQL database
-alembic upgrade head
-```
-
----
-
-## 💾 3. Offline Mode Cache Download (Optional)
+## 💾 2. Offline Mode Cache Download (Optional)
 
 To enable 100% offline local token counting without fetching tiktoken files from Azure at request time:
 
-```bash
+```powershell
+# Download cl100k_base.tiktoken vocab file to cache/ folder
 python download_cache.py
 ```
+*Note: If this download fails or times out due to a slow network, the engine automatically degrades gracefully to a regex-based character token estimator fallback, preventing any server crashes.*
 
 ---
 
-## 🧪 4. Running Unit Tests
+## 🧪 3. Running Unit Tests
 
-Execute the full test suite (including pipeline compression and database persistence/analytics):
+Execute the test suite using `pytest`. This verifies chunking boundaries, semantic deduplication, comment stripping, floor protection, and similarity calculations.
 
-```bash
-python -m pytest tests/ -v
+```powershell
+# Run the test suite
+python -m pytest
 ```
 
 Expected output:
 ```
-====================== 19 passed in 10.40s ======================
+============================== 7 passed in 0.06s ==============================
 ```
 
 ---
 
-## 🌐 5. Running the Application
+## 📊 4. Running the Verification Pipeline
 
-To start both the **FastAPI Backend (Port 8000)** and **Next.js Frontend (Port 3000)** concurrently:
+To test context compression on the sample dataset (`sample_data/long_codebase.txt`) and print all judged metrics (compression ratio, QA retention, USD cost savings, and latency speedups):
 
-```bash
-npm run dev
+```powershell
+python verify_pipeline.py
 ```
 
-Or start the backend independently:
-```bash
-uvicorn app.main:app --reload --port 8000
+Expected output:
+```
+============================================================
+NUCLEUS BACKEND VERIFICATION PIPELINE
+============================================================
+...
+Compression Results:
+Raw Tokens:          1274
+Compressed Tokens:   302
+Compression Ratio:   76.3% reduction
+Stage 2 Provider:    stage1-only
+Cost Saved (Sonnet): $0.002916
+------------------------------------------------------------
+Running QA answer validation...
+...
+Accuracy Retained:   100.0%
+Validation Provider: mock
+Latency Speedup:     1.85x
+============================================================
+SUCCESS: Target compression ratio (>70%) met!
+SUCCESS: Target accuracy retention (95%+) met!
+============================================================
 ```
 
 ---
 
-## 📡 6. Database & Compression API Endpoints
+## 🌐 5. Running the FastAPI Server
 
-- **`POST /compress`**: Compress input context & auto-persist run details to Supabase.
-- **`GET /history`**: Retrieve recent compression jobs from Supabase (newest first).
-- **`GET /history/{id}`**: Retrieve full details of a specific job.
-- **`DELETE /history/{id}`**: Delete a single history record.
-- **`DELETE /history`**: Clear all history records.
-- **`GET /analytics`**: Retrieve aggregated metrics (average ratio, cost saved, latency, accuracy, provider usage stats).
+To start the local REST API server:
+
+```powershell
+# Run the API server
+uvicorn app.main:app --reload
+```
+
+The API will be available at:
+- **Base URL**: `http://127.0.0.1:8000`
+- **Interactive Documentation (Swagger)**: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
+- **Health Check**: `http://127.0.0.1:8000/health`
+
+---
+
+## 📡 6. Testing API Endpoints
+
+You can verify the `/compress` endpoint using a client (like `curl` or Postman):
+
+```bash
+curl -X POST "http://127.0.0.1:8000/compress" \
+     -H "Content-Type: application/json" \
+     -d '{
+       "text": "def calculate(x):\n    # boilerplate comment\n    return x * 42",
+       "qa_pairs": [
+         {
+           "question": "What number is the input multiplied by?"
+         }
+       ]
+     }'
+```

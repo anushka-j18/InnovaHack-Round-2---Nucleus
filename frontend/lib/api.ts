@@ -15,7 +15,6 @@ export interface CompressRequest {
 }
 
 export interface CompressResponse {
-  id?: string;
   compressed_text: string;
   raw_tokens: number;
   compressed_tokens: number;
@@ -27,35 +26,6 @@ export interface CompressResponse {
   cost_saved_usd: number;
   latency_speedup_ratio?: number | null;
   latency_speedup_is_estimated?: boolean | null;
-}
-
-export interface HistoryItem {
-  id: string;
-  created_at?: string;
-  dataset_name: string;
-  original_text: string;
-  compressed_text: string;
-  original_tokens: number;
-  compressed_tokens: number;
-  compression_ratio: number;
-  cost_saved_usd: number;
-  latency_ms: number;
-  latency_speedup: number;
-  semantic_accuracy: number;
-  provider_used: str;
-  status: string;
-  warning?: string | null;
-}
-
-export interface AnalyticsData {
-  average_compression_ratio: number;
-  average_cost_saved: number;
-  average_latency_ms: number;
-  average_semantic_accuracy: number;
-  total_runs: number;
-  best_compression: number;
-  worst_compression: number;
-  provider_usage_statistics: Record<string, number>;
 }
 
 export interface HealthResponse {
@@ -153,67 +123,5 @@ export async function compress(payload: CompressRequest): Promise<CompressRespon
       throw error;
     }
     throw new ApiError("Network Error: Failed to communicate with Nucleus backend engine.", 500);
-  }
-}
-
-/**
- * Fetch compression history runs from Supabase database
- */
-export async function fetchHistory(): Promise<HistoryItem[]> {
-  try {
-    const response = await fetch(`${API_BASE_URL}/history`, {
-      method: "GET",
-      headers: { "Content-Type": "application/json" },
-      cache: "no-store",
-    });
-    if (!response.ok) return [];
-    return await response.json();
-  } catch {
-    return [];
-  }
-}
-
-/**
- * Delete a single history job record from Supabase
- */
-export async function deleteHistoryItem(id: string): Promise<boolean> {
-  try {
-    const response = await fetch(`${API_BASE_URL}/history/${id}`, {
-      method: "DELETE",
-    });
-    return response.ok;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Clear all history records from Supabase
- */
-export async function clearHistory(): Promise<boolean> {
-  try {
-    const response = await fetch(`${API_BASE_URL}/history`, {
-      method: "DELETE",
-    });
-    return response.ok;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Fetch aggregated analytics statistics from Supabase
- */
-export async function fetchAnalytics(): Promise<AnalyticsData | null> {
-  try {
-    const response = await fetch(`${API_BASE_URL}/analytics`, {
-      method: "GET",
-      headers: { "Content-Type": "application/json" },
-      cache: "no-store",
-    });
-    if (!response.ok) return null;
-    return await response.json();
-  } catch {
-    return null;
   }
 }
