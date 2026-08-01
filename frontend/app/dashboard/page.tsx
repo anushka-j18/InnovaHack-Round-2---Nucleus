@@ -19,15 +19,14 @@ export default function DashboardPage() {
   const [result, setResult] = React.useState<CompressResponse | null>(null);
   const [history, setHistory] = React.useState<HistoryItem[]>([]);
 
-  // Execute Compression Pipeline
-  const handleCompress = async () => {
+  // Execute Compression Pipeline with useCallback
+  const handleCompress = React.useCallback(async () => {
     if (!text.trim()) return;
     setIsLoading(true);
     setError(null);
     setResult(null);
     setCurrentStepIndex(0);
 
-    // Simulated progress steps during backend call
     const stepInterval = setInterval(() => {
       setCurrentStepIndex((prev) => (prev < 4 ? prev + 1 : prev));
     }, 400);
@@ -38,7 +37,6 @@ export default function DashboardPage() {
       setCurrentStepIndex(5);
       setResult(response);
 
-      // Add to history
       const newHistoryItem: HistoryItem = {
         id: `run-${Date.now()}`,
         title: response.compressed_text.slice(0, 30).split("\n")[0] || "Context Compression",
@@ -62,12 +60,12 @@ export default function DashboardPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [text]);
 
-  const handleSelectHistory = (item: HistoryItem) => {
+  const handleSelectHistory = React.useCallback((item: HistoryItem) => {
     setText(item.text);
     window.scrollTo({ top: 0, behavior: "smooth" });
-  };
+  }, []);
 
   return (
     <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8 space-y-10">

@@ -44,7 +44,7 @@ function useAnimatedNumber(target: number, duration: number = 1000) {
   return value;
 }
 
-export function MetricsDashboard({ data, className }: MetricsDashboardProps) {
+function MetricsDashboardComponent({ data, className }: MetricsDashboardProps) {
   const animRawTokens = useAnimatedNumber(data.raw_tokens);
   const animCompTokens = useAnimatedNumber(data.compressed_tokens);
   const animRatio = useAnimatedNumber(data.compression_ratio);
@@ -176,3 +176,5 @@ export function MetricsDashboard({ data, className }: MetricsDashboardProps) {
     </div>
   );
 }
+
+export const MetricsDashboard = React.memo(MetricsDashboardComponent);
