@@ -22,3 +22,11 @@ KEEP_RATIO = 0.30
 # Rate Limiting & Retries
 MAX_RETRIES = 3
 INITIAL_BACKOFF = 2.0  # seconds
+
+# Context-window ceiling for the embedding model above. all-MiniLM-L6-v2
+# silently truncates any single input beyond 256 tokens instead of erroring,
+# which would make similarity/dedup checks on longer chunks silently wrong.
+EMBEDDING_MAX_TOKENS = 256
+
+# Maximum characters accepted per /compress request.
+MAX_INPUT_CHARS = 200_000

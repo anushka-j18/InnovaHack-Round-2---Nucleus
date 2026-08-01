@@ -370,4 +370,47 @@ def chunk_text(text: str) -> List[Dict]:
             "line_indices": list(range(len(lines)))
         }]
         
-    return chunks
+    return enforce_max_chunk_tokens(chunks)
+
+def enforce_max_chunk_tokens(chunks: List[Dict], max_tokens: int = None) -> List[Dict]:
+    """
+    Guarantee no chunk exceeds the embedding model's real context window.
+    chunk_text() splits on character counts, which is a proxy for token
+    count, not a guarantee. This re-splits any offending chunk line-by-line,
+    preserving line_indices, and re-indexes the chunk list afterward.
+    """
+    if max_tokens is None:
+        from app.config import EMBEDDING_MAX_TOKENS
+        max_tokens = EMBEDDING_MAX_TOKENS
+
+    result = []
+    for c in chunks:
+        if count_tokens(c["text"]) <= max_tokens:
+            result.append(c)
+            continue
+
+        lines_in_chunk = c["text"].split("\n")
+        indices_in_chunk = c["line_indices"]
+        sub_lines, sub_indices, sub_tokens = [], [], 0
+
+        def flush():
+            if sub_lines:
+                result.append({
+                    "index": -1,
+                    "text": "\n".join(sub_lines),
+                    "line_indices": list(sub_indices)
+                })
+
+        for line, gidx in zip(lines_in_chunk, indices_in_chunk):
+            line_tokens = count_tokens(line)
+            if sub_tokens + line_tokens > max_tokens and sub_lines:
+                flush()
+                sub_lines, sub_indices, sub_tokens = [], [], 0
+            sub_lines.append(line)
+            sub_indices.append(gidx)
+            sub_tokens += line_tokens
+        flush()
+
+    for i, c in enumerate(result):
+        c["index"] = i
+    return result

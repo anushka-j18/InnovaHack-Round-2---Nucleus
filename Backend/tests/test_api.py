@@ -202,3 +202,26 @@ def test_health_check_offline_mode():
     res_json = response.json()
     assert "offline_mode" in res_json
     assert isinstance(res_json["offline_mode"], bool)
+
+def test_compress_compression_trace():
+    """Verify that compression_trace is included and tracks all stages correctly."""
+    payload = {
+        "text": "Hello, my email is dev@nucleus.ai and key is gsk_XyZ123456789012345678901234567890123456789012345.\n\nParagraph 1 is here.\n\nParagraph 2 is duplicate.\n\nParagraph 2 is duplicate.",
+        "redact_pii": True
+    }
+    response = client.post("/compress", json=payload)
+    assert response.status_code == 200
+    res_json = response.json()
+    assert "compression_trace" in res_json
+    trace = res_json["compression_trace"]
+    
+    stages = [stage["stage"] for stage in trace]
+    assert "pii_redaction" in stages
+    assert "chunk_deduplication" in stages
+    assert "filler_stripping" in stages
+    
+    for stage in trace:
+        assert "stage" in stage
+        assert "description" in stage
+        assert "tokens_before" in stage
+        assert "tokens_after" in stage

@@ -200,7 +200,8 @@ async def compress_endpoint(req: CompressRequest):
             plain_english_summary=result["plain_english_summary"],
             structured_diff=result["structured_diff"],
             validation_details=validation_details,
-            stage_breakdown=result["stage_breakdown"]
+            stage_breakdown=result["stage_breakdown"],
+            compression_trace=result.get("compression_trace")
         )
         
         # Save to Cache

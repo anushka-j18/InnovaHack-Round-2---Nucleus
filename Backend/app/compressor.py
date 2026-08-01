@@ -279,24 +279,43 @@ def compute_pure_tfidf_scores(clean_lines: list[str]) -> dict:
         
     return line_scores
 
-def redact_pii_content(text: str) -> str:
+def redact_pii_content(text: str) -> tuple[str, list[str]]:
     """Scrub sensitive info like API keys, emails, and credit cards."""
     email_pattern = re.compile(r'\b[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+\b')
     card_pattern = re.compile(r'\b(?:\d[ -]?){13,16}\b')
     api_key_pattern = re.compile(
         r'\b(?:gsk_[a-zA-Z0-9]{40,60}|AIzaSy[a-zA-Z0-9_-]{30,45}|sk-ant-[a-zA-Z0-9_-]{80,120}|sk-[a-zA-Z0-9]{40,60})\b'
     )
+    
+    removed_items = []
+    
+    emails = email_pattern.findall(text)
+    if emails:
+        removed_items.extend([f"email: {e}" for e in emails])
     text = email_pattern.sub("[EMAIL_REDACTED]", text)
+    
+    cards = card_pattern.findall(text)
+    if cards:
+        removed_items.extend([f"card: {c}" for c in cards])
     text = card_pattern.sub("[CARD_REDACTED]", text)
+    
+    keys = api_key_pattern.findall(text)
+    if keys:
+        removed_items.extend([f"api_key: {k[:8]}..." for k in keys])
     text = api_key_pattern.sub("[API_KEY_REDACTED]", text)
-    return text
+    
+    return text, removed_items
 
-def deduplicate_json_logs(text: str) -> str:
+def deduplicate_json_logs(text: str) -> tuple[str, list[str]]:
     """Perform schema-aware field deduplication for structured JSON logs."""
     import json
     lines = text.splitlines()
     processed_lines = []
     seen_sigs = set()
+    removed_items = []
+    
+    duplicate_count = 0
+    stripped_keys = set()
     
     for line in lines:
         stripped = line.strip()
@@ -308,10 +327,14 @@ def deduplicate_json_logs(text: str) -> str:
                 data = json.loads(stripped)
                 if isinstance(data, dict):
                     keys_to_remove = {"timestamp", "time", "date", "thread", "pid", "process", "level", "logger", "hostname", "host"}
+                    found_keys = keys_to_remove.intersection(data.keys())
+                    stripped_keys.update(found_keys)
+                    
                     cleaned_data = {k: v for k, v in data.items() if k not in keys_to_remove}
                     
                     sig = json.dumps(cleaned_data, sort_keys=True)
                     if sig in seen_sigs:
+                        duplicate_count += 1
                         continue
                     seen_sigs.add(sig)
                     processed_lines.append(json.dumps(cleaned_data))
@@ -322,7 +345,12 @@ def deduplicate_json_logs(text: str) -> str:
         except Exception:
             processed_lines.append(line)
             
-    return "\n".join(processed_lines)
+    if duplicate_count > 0:
+        removed_items.append(f"duplicate_logs: {duplicate_count} lines")
+    if stripped_keys:
+        removed_items.append(f"stripped_keys: {', '.join(sorted(list(stripped_keys)))}")
+        
+    return "\n".join(processed_lines), removed_items
 
 def protect_conversation_turns(text: str, num_recent_turns: int = 3) -> set:
     """Identify conversation turns and return global line indices of the recent turns to keep verbatim."""
@@ -502,34 +530,72 @@ def compress(
             "compression_ratio": 0.0,
             "plain_english_summary": "Empty input text.",
             "structured_diff": [],
-            "stage_breakdown": []
+            "stage_breakdown": [],
+            "compression_trace": []
         }
         
-    # Stage 0: PII Redaction
-    processed_raw = redact_pii_content(raw_text) if redact_pii else raw_text
+    compression_trace = []
+    running_text = raw_text
+    tokens_before = count_tokens(running_text)
     
+    # Stage 0: PII Redaction
+    pii_removed = []
+    if redact_pii:
+        running_text, pii_removed = redact_pii_content(running_text)
+        tokens_after = count_tokens(running_text)
+        compression_trace.append({
+            "stage": "pii_redaction",
+            "description": f"Scrubbed sensitive items: {len(pii_removed)} patterns matched.",
+            "removed_items": pii_removed if pii_removed else None,
+            "tokens_before": tokens_before,
+            "tokens_after": tokens_after
+        })
+        tokens_before = tokens_after
+        
     # Stage 0.5: Schema-Aware JSON log deduplication
+    log_removed = []
     from app.ingestion import detect_type
-    if detect_type(processed_raw) == "log":
-        processed_raw = deduplicate_json_logs(processed_raw)
+    is_log = detect_type(running_text) == "log"
+    if is_log:
+        running_text, log_removed = deduplicate_json_logs(running_text)
+        tokens_after = count_tokens(running_text)
+        compression_trace.append({
+            "stage": "json_log_dedup",
+            "description": "Deduplicated JSON structured log lines and stripped metadata fields.",
+            "removed_items": log_removed if log_removed else None,
+            "tokens_before": tokens_before,
+            "tokens_after": tokens_after
+        })
+        tokens_before = tokens_after
         
     # Resolve aggressiveness override
     if aggressiveness is not None:
         keep_ratio = 1.0 - aggressiveness
         
     # Identify conversation protection turns
-    protected_global_indices = protect_conversation_turns(processed_raw) if is_conversation else set()
+    protected_global_indices = protect_conversation_turns(running_text) if is_conversation else set()
     
     raw_tokens = count_tokens(raw_text)
     
     # Stage A: Chunking
-    chunks = chunk_text(processed_raw)
+    chunks = chunk_text(running_text)
+    chunks_count_before = len(chunks)
     
     # Stage B: Deduplication
     deduped_chunks = dedup_chunks(chunks, threshold=similarity_threshold)
     deduped_indices = {c["index"] for c in deduped_chunks}
     deduped_text = "\n\n".join([c["text"] for c in deduped_chunks])
-    deduped_tokens = count_tokens(deduped_text)
+    tokens_after_dedup = count_tokens(deduped_text)
+    
+    removed_chunks = [f"chunk {c['index']}" for c in chunks if c["index"] not in deduped_indices]
+    compression_trace.append({
+        "stage": "chunk_deduplication",
+        "description": f"Removed {chunks_count_before - len(deduped_chunks)} chunks out of {chunks_count_before} that were similar to earlier chunks.",
+        "removed_items": removed_chunks if removed_chunks else None,
+        "tokens_before": tokens_before,
+        "tokens_after": tokens_after_dedup
+    })
+    tokens_before = tokens_after_dedup
     
     # Stage C: Adaptive Budget Stripping
     if target_token_budget is not None and raw_tokens > 0:
@@ -671,9 +737,36 @@ def compress(
     # Stage breakdown token counts
     stage_breakdown = [
         {"stage": "raw", "tokens": raw_tokens, "description": "Original raw input text size"},
-        {"stage": "deduplicated", "tokens": deduped_tokens, "description": "Size after semantic chunk deduplication"},
+        {"stage": "deduplicated", "tokens": tokens_after_dedup, "description": "Size after semantic chunk deduplication"},
         {"stage": "final", "tokens": best_result["compressed_tokens"], "description": "Final output size after budget & layout fitting"}
     ]
+    
+    # Trace for Sweeps & Final Stripping
+    if target_token_budget is not None:
+        compression_trace.append({
+            "stage": "budget_fit_sweep",
+            "description": f"Dynamically searched parameters to fit within budget of {target_token_budget} tokens.",
+            "removed_items": [f"adjusted keep_ratio to {best_result['keep_ratio']:.2f}", f"adjusted floor_threshold to {best_result['floor_threshold']:.2f}"],
+            "tokens_before": tokens_before,
+            "tokens_after": best_result["compressed_tokens"]
+        })
+        tokens_before = best_result["compressed_tokens"]
+        
+    low_value_lines = []
+    for idx, item in enumerate(structured_diff):
+        if not item["kept"] and item["reason"] == "low-value":
+            low_value_lines.append(f"line {idx}: {item['line'][:20]}...")
+            
+    if len(low_value_lines) > 20:
+        low_value_lines = low_value_lines[:20] + [f"... and {len(low_value_lines) - 20} more lines"]
+        
+    compression_trace.append({
+        "stage": "filler_stripping",
+        "description": "Stripped low-value content lines using TF-IDF density scores.",
+        "removed_items": low_value_lines if low_value_lines else None,
+        "tokens_before": tokens_before,
+        "tokens_after": best_result["compressed_tokens"]
+    })
     
     return {
         "compressed_text": best_result["compressed_text"],
@@ -682,5 +775,6 @@ def compress(
         "compression_ratio": best_result["compression_ratio"],
         "plain_english_summary": summary,
         "structured_diff": structured_diff,
-        "stage_breakdown": stage_breakdown
+        "stage_breakdown": stage_breakdown,
+        "compression_trace": compression_trace
     }

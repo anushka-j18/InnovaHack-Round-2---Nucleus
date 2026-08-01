@@ -1,12 +1,13 @@
 from pydantic import BaseModel, Field
 from typing import List, Optional
+from app.config import MAX_INPUT_CHARS
 
 class QAPair(BaseModel):
     question: str = Field(..., description="The validation question to run against original and compressed context")
     expected_answer: Optional[str] = Field(None, description="Optional ground truth answer to compare against")
 
 class CompressRequest(BaseModel):
-    text: str = Field(..., max_length=50000, description="The raw context text to be compressed (max 50,000 characters)")
+    text: str = Field(..., max_length=MAX_INPUT_CHARS, description=f"The raw context text to be compressed (max {MAX_INPUT_CHARS:,} characters)")
     qa_pairs: Optional[List[QAPair]] = Field(None, description="Optional list of QA pairs for accuracy retention validation")
     aggressiveness: Optional[float] = Field(None, ge=0.0, le=1.0, description="Aggressiveness factor (0.0=no compression, 1.0=maximum compression)")
     keep_ratio: Optional[float] = Field(None, ge=0.0, le=1.0, description="Explicit keep ratio (overrides default config)")
@@ -31,6 +32,13 @@ class StageBreakdown(BaseModel):
     tokens: int = Field(..., description="Token count at the end of this stage")
     description: str = Field(..., description="Brief description of the stage processing")
 
+class CompressionStage(BaseModel):
+    stage: str
+    description: str
+    removed_items: Optional[List[str]] = None
+    tokens_before: int
+    tokens_after: Optional[int] = None
+
 class CompressResponse(BaseModel):
     compressed_text: str = Field(..., description="The compressed version of the input text")
     raw_tokens: int = Field(..., description="Token count of the original context")
@@ -47,6 +55,7 @@ class CompressResponse(BaseModel):
     structured_diff: Optional[List[LineDiff]] = Field(None, description="Line-by-line diff metadata containing keep/drop flags and reasons")
     validation_details: Optional[List[QAValidationDetail]] = Field(None, description="Side-by-side Q&A answers for validation inspectability")
     stage_breakdown: Optional[List[StageBreakdown]] = Field(None, description="Compression progress tokens breakdown stage-by-stage")
+    compression_trace: Optional[List[CompressionStage]] = Field(None, description="Structured stage-by-stage log tracking token changes and removed items")
 
 class ConversationCompressRequest(BaseModel):
     session_id: str = Field(..., description="Unique conversation session identifier")
