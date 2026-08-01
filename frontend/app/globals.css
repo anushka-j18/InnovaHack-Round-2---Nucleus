@@ -70,6 +70,39 @@ body {
   overflow-x: hidden;
 }
 
+/* Custom Animations & Accessibility Utilities */
+html {
+  scroll-behavior: smooth;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulseGlow {
+  0%, 100% {
+    box-shadow: 0 0 15px -3px rgba(38, 208, 124, 0.25);
+  }
+  50% {
+    box-shadow: 0 0 25px 2px rgba(38, 208, 124, 0.45);
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-pulse-glow {
+  animation: pulseGlow 3s infinite ease-in-out;
+}
+
 /* Custom Glassmorphism Utilities */
 .glass-panel {
   background: rgba(11, 16, 29, 0.75);
@@ -94,3 +127,4 @@ body {
 .cyan-glow {
   box-shadow: 0 0 20px -3px rgba(6, 182, 212, 0.35);
 }
+
