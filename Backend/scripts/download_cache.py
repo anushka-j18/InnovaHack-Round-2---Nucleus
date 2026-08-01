@@ -11,8 +11,9 @@ def download_cache():
     logger.info("NUCLEUS CACHE PRE-DOWNLOAD TOOL")
     logger.info("=" * 60)
     
-    # Create cache directory
-    cache_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cache")
+    # Create cache directory at Backend/cache
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    cache_dir = os.path.join(base_dir, "cache")
     os.makedirs(cache_dir, exist_ok=True)
     logger.info(f"Cache directory: {cache_dir}")
     
