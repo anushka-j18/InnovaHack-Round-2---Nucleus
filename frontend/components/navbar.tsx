@@ -87,14 +87,14 @@ export function Navbar() {
           <div className="flex flex-col">
             <div className="flex items-center gap-1.5">
               <span className="bg-gradient-to-r from-white via-slate-200 to-emerald-400 bg-clip-text text-lg font-bold tracking-tight text-transparent">
-                ZIP
+                NUCLEUS
               </span>
               <span className="rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-400 border border-emerald-500/20">
-                NUCLEUS
+                v1.0
               </span>
             </div>
             <span className="text-[10px] font-medium text-slate-400 tracking-wider uppercase">
-              Context Engine
+              Context Compression Engine
             </span>
           </div>
         </Link>

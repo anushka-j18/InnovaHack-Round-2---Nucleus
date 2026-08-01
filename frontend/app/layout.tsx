@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "ZIP | Ultra-Low Resource Context Compression Engine",
+  title: "NUCLEUS | Ultra-Low Resource Context Compression Engine",
   description: "Enterprise-grade context compression and token optimization engine.",
 };
 
