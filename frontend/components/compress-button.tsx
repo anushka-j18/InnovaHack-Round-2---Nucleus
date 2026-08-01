@@ -1,10 +1,10 @@
 "use client";
 
 import * as React from "react";
-import { Zap, Loader2, CheckCircle2, Sparkles } from "lucide-react";
+import { Zap, Loader2, CheckCircle2, ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-interface CompressButtonProps
+export interface CompressButtonProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   isLoading?: boolean;
   isSuccess?: boolean;
@@ -12,89 +12,97 @@ interface CompressButtonProps
   size?: "default" | "sm" | "lg";
 }
 
-export function CompressButton({
-  onClick,
-  isLoading = false,
-  isSuccess = false,
-  disabled = false,
-  size = "lg",
-  className,
-  children,
-  ...props
-}: CompressButtonProps) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled || isLoading}
-      className={cn(
-        "relative group inline-flex items-center justify-center font-semibold rounded-xl transition-all duration-300 select-none focus:outline-none focus:ring-2 focus:ring-emerald-400/50 active:scale-95 disabled:pointer-events-none",
-        
-        // Size variants
-        size === "sm" && "h-9 px-4 text-xs gap-1.5",
-        size === "default" && "h-11 px-5 text-sm gap-2",
-        size === "lg" && "h-13 px-7 text-base gap-2.5",
+export const CompressButton = React.forwardRef<
+  HTMLButtonElement,
+  CompressButtonProps
+>(
+  (
+    {
+      className,
+      isLoading = false,
+      isSuccess = false,
+      disabled = false,
+      size = "lg",
+      onClick,
+      children,
+      ...props
+    },
+    ref
+  ) => {
+    // Current button state determination
+    const currentState = isSuccess
+      ? "success"
+      : isLoading
+      ? "loading"
+      : disabled
+      ? "disabled"
+      : "idle";
 
-        // State Styling Matrix
-        // 1. Success State
-        isSuccess
-          ? "bg-emerald-500 text-slate-950 shadow-[0_0_30px_rgba(38,208,124,0.6)] ring-2 ring-emerald-300"
-          : isLoading
-          ? "bg-slate-900 text-emerald-400 border border-emerald-500/40 shadow-[0_0_20px_rgba(38,208,124,0.25)] cursor-wait"
-          : disabled
-          ? "bg-slate-800/60 text-slate-500 border border-slate-700/40 opacity-50 cursor-not-allowed"
-          : // Idle & Hover State
-            "bg-gradient-to-r from-emerald-500 via-teal-400 to-cyan-500 text-slate-950 shadow-[0_0_20px_-3px_rgba(38,208,124,0.4)] hover:shadow-[0_0_35px_rgba(38,208,124,0.6)] hover:scale-[1.02]",
+    return (
+      <button
+        ref={ref}
+        disabled={disabled || isLoading}
+        onClick={onClick}
+        className={cn(
+          "group relative inline-flex items-center justify-center rounded-xl font-semibold transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/50 select-none overflow-hidden",
+          size === "sm" && "h-9 px-4 text-xs gap-1.5",
+          size === "default" && "h-11 px-5 text-sm gap-2",
+          size === "lg" && "h-12 px-6 text-base gap-2.5",
 
-        className
-      )}
-      {...props}
-    >
-      {/* Ambient Pulsing Aura for Idle State */}
-      {!disabled && !isLoading && !isSuccess && (
-        <span className="absolute -inset-0.5 rounded-xl bg-gradient-to-r from-emerald-400 to-cyan-400 opacity-30 blur-md transition-opacity duration-300 group-hover:opacity-75" />
-      )}
+          // State-specific styling
+          currentState === "idle" &&
+            "bg-gradient-to-r from-emerald-500 via-teal-400 to-cyan-500 text-slate-950 hover:opacity-95 shadow-[0_0_20px_-3px_rgba(38,208,124,0.4)] hover:shadow-[0_0_30px_-2px_rgba(38,208,124,0.6)] active:scale-[0.98]",
 
-      {/* Button Content Wrapper */}
-      <span className="relative z-10 flex items-center justify-center gap-2">
-        {/* Loading Spinner */}
-        {isLoading && (
-          <Loader2 className="h-5 w-5 animate-spin text-emerald-400 shrink-0" />
+          currentState === "loading" &&
+            "bg-gradient-to-r from-emerald-600 to-teal-600 text-slate-950 shadow-[0_0_20px_-3px_rgba(38,208,124,0.4)] cursor-wait opacity-90",
+
+          currentState === "success" &&
+            "bg-emerald-400 text-slate-950 shadow-[0_0_25px_rgba(38,208,124,0.6)] scale-[1.02]",
+
+          currentState === "disabled" &&
+            "bg-slate-800/80 border border-slate-700/60 text-slate-500 opacity-50 cursor-not-allowed shadow-none",
+
+          className
+        )}
+        {...props}
+      >
+        {/* Animated Background Pulse Shimmer */}
+        {currentState === "idle" && (
+          <span className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-out" />
         )}
 
-        {/* Success Check Icon */}
-        {isSuccess && (
-          <CheckCircle2 className="h-5 w-5 text-slate-950 animate-bounce shrink-0" />
+        {/* State Content Rendering */}
+        {currentState === "loading" && (
+          <>
+            <Loader2 className="h-5 w-5 animate-spin text-slate-950 shrink-0" />
+            <span>Compressing Context...</span>
+          </>
         )}
 
-        {/* Idle / Hover Lightning Bolt */}
-        {!isLoading && !isSuccess && (
-          <Zap
-            className={cn(
-              "h-5 w-5 fill-slate-950 text-slate-950 transition-transform duration-300 shrink-0",
-              !disabled && "group-hover:scale-110 group-hover:rotate-12"
-            )}
-          />
+        {currentState === "success" && (
+          <>
+            <CheckCircle2 className="h-5 w-5 text-slate-950 shrink-0 animate-bounce" />
+            <span>Compressed Successfully!</span>
+          </>
         )}
 
-        {/* Dynamic Label Text */}
-        <span>
-          {children ? (
-            children
-          ) : isSuccess ? (
-            "Compression Complete!"
-          ) : isLoading ? (
-            "Compressing Context..."
-          ) : (
-            "Compress Context"
-          )}
-        </span>
-
-        {/* Sparkle micro-indicator on hover */}
-        {!disabled && !isLoading && !isSuccess && (
-          <Sparkles className="h-4 w-4 text-slate-950 opacity-0 transition-all duration-300 group-hover:opacity-100 group-hover:translate-x-0.5" />
+        {currentState === "disabled" && (
+          <>
+            <Zap className="h-4 w-4 text-slate-500 shrink-0" />
+            <span>{children || "Compress Context"}</span>
+          </>
         )}
-      </span>
-    </button>
-  );
-}
+
+        {currentState === "idle" && (
+          <>
+            <Zap className="h-5 w-5 fill-slate-950 text-slate-950 shrink-0 transition-transform duration-300 group-hover:scale-110 group-hover:rotate-12" />
+            <span>{children || "Compress Context"}</span>
+            <ArrowRight className="h-4 w-4 text-slate-950 shrink-0 transition-transform duration-200 group-hover:translate-x-1" />
+          </>
+        )}
+      </button>
+    );
+  }
+);
+
+CompressButton.displayName = "CompressButton";
