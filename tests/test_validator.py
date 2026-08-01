@@ -25,6 +25,7 @@ def test_validate():
     assert "accuracy_retained" in result
     assert result["accuracy_retained"] is not None
     assert "providerUsed" in result
+    assert "latency_speedup_ratio" in result
     # Since we are using mock LLM client fallback in tests (API keys not set),
     # both raw and compressed should match well, resulting in high retention.
     assert 0.0 <= result["accuracy_retained"] <= 100.0

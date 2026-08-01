@@ -49,7 +49,7 @@ def run_verification():
     
     # Run Compression
     print("Running context compression...")
-    result = compress(raw_text, similarity_threshold=0.92, keep_ratio=0.7)
+    result = compress(raw_text)
     
     # Local check for Mock fallback
     from app.compressor import get_model
@@ -58,12 +58,17 @@ def run_verification():
         stage2_provider = "stage1-only"
     else:
         stage2_provider = "groq"
+        
+    # Cost saving calculation (Reference target model: Claude 3.5 Sonnet at $3.00/1M input tokens)
+    tokens_saved = result["raw_tokens"] - result["compressed_tokens"]
+    cost_saved_usd = max(0.0, tokens_saved * (3.00 / 1_000_000))
     
     print("\nCompression Results:")
     print(f"Raw Tokens:          {result['raw_tokens']}")
     print(f"Compressed Tokens:   {result['compressed_tokens']}")
     print(f"Compression Ratio:   {result['compression_ratio']}% reduction")
     print(f"Stage 2 Provider:    {stage2_provider}")
+    print(f"Cost Saved (Sonnet): ${cost_saved_usd:.6f}")
     print("-" * 60)
     
     # Run Validation
@@ -71,19 +76,20 @@ def run_verification():
     validation_res = validate(raw_text, result["compressed_text"], qa_pairs)
     print(f"\nAccuracy Retained:   {validation_res['accuracy_retained']}%")
     print(f"Validation Provider: {validation_res['providerUsed']}")
+    print(f"Latency Speedup:     {validation_res['latency_speedup_ratio']}x")
     print("=" * 60)
     
     # Verify target targets are met
-    # Target: Compression ratio > 30% on mock dataset, accuracy > 90%
-    if result["compression_ratio"] >= 30.0:
-        print("SUCCESS: Target compression ratio met!")
+    # Target: Compression ratio > 70% on mock dataset, accuracy > 95%
+    if result["compression_ratio"] >= 70.0:
+        print("SUCCESS: Target compression ratio (>70%) met!")
     else:
-        print("WARNING: Compression ratio below target.")
+        print("WARNING: Compression ratio below target (70.0%).")
         
-    if validation_res["accuracy_retained"] is not None and validation_res["accuracy_retained"] >= 90.0:
-        print("SUCCESS: Target accuracy retention met!")
+    if validation_res["accuracy_retained"] is not None and validation_res["accuracy_retained"] >= 95.0:
+        print("SUCCESS: Target accuracy retention (95%+) met!")
     else:
-        print("WARNING: Accuracy retention below target.")
+        print("WARNING: Accuracy retention below target (95.0%).")
     print("=" * 60)
 
 if __name__ == "__main__":

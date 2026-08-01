@@ -4,19 +4,45 @@ from typing import List, Dict
 def count_tokens(text: str, encoding_name: str = "cl100k_base") -> int:
     """
     Count the number of tokens in the given text using tiktoken.
-    Falls back to character-count estimation if tiktoken is not installed.
+    Falls back to local file load or character-count estimation if offline/not installed.
     """
     if not text:
         return 0
     try:
         import tiktoken
+        import os
         try:
-            encoding = tiktoken.get_encoding(encoding_name)
-        except ValueError:
-            encoding = tiktoken.get_encoding("cl100k_base")
-        return len(encoding.encode(text))
-    except ImportError:
-        # Fallback: standard heuristic is ~4 characters per token
+            # Locate local cache file if pre-downloaded
+            base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            cache_path = os.path.join(base_dir, "cache", "cl100k_base.tiktoken")
+            
+            if os.path.exists(cache_path):
+                # Instantiate encoding purely offline using BPE file
+                mergeable_ranks = tiktoken.load.load_tiktoken_bpe(cache_path)
+                encoding = tiktoken.Encoding(
+                    name="cl100k_base",
+                    pat_str=r"""(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}{1,3}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+""",
+                    mergeable_ranks=mergeable_ranks,
+                    special_tokens={
+                        "<|endoftext|>": 100257,
+                        "<|fim_prefix|>": 100258,
+                        "<|fim_middle|>": 100259,
+                        "<|fim_suffix|>": 100260,
+                        "<|endofprompt|>": 100276
+                    }
+                )
+            else:
+                try:
+                    encoding = tiktoken.get_encoding(encoding_name)
+                except ValueError:
+                    encoding = tiktoken.get_encoding("cl100k_base")
+            return len(encoding.encode(text))
+        except Exception as e:
+            # Handle offline socket/SSL/blob-access timeout issues
+            print(f"[Ingestion] Warning: tiktoken online fetch failed ({e}). Using offline heuristic.")
+            return max(1, len(text) // 4)
+    except Exception:
+        # Fallback if tiktoken package is not installed at all
         return max(1, len(text) // 4)
 
 def detect_type(text: str) -> str:
@@ -68,10 +94,10 @@ def chunk_text(text: str) -> List[Dict]:
     chunks = []
     
     if content_type == "log":
-        # Group log lines into chunks of approx 1500 chars (maintaining log entry boundaries)
+        # Group log lines into chunks of approx 200 chars (maintaining log entry boundaries)
         current_chunk = []
         current_size = 0
-        max_chunk_size = 1500
+        max_chunk_size = 200
         
         # Match potential new log line patterns
         log_start_pattern = re.compile(
@@ -101,7 +127,7 @@ def chunk_text(text: str) -> List[Dict]:
         
         current_chunk = []
         current_size = 0
-        max_chunk_size = 1800  # bytes/chars
+        max_chunk_size = 200  # bytes/chars
         
         for line in lines:
             if boundary_pattern.match(line) and current_size > max_chunk_size:

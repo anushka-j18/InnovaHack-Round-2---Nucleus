@@ -18,3 +18,5 @@ class CompressResponse(BaseModel):
     stage2_provider: Optional[str] = Field(None, description="Provider used for compression stage (e.g. 'groq' or 'stage1-only')")
     validation_provider: Optional[str] = Field(None, description="Provider used for QA validation (e.g. 'claude', 'gemini')")
     providerUsed: Optional[str] = Field(None, description="The provider used for validation QA (matching frontend/DB naming)")
+    cost_saved_usd: float = Field(..., description="Estimated cost savings in USD compared to raw context processing")
+    latency_speedup_ratio: Optional[float] = Field(None, description="Latency speedup ratio factor (e.g. 2.4x)")
