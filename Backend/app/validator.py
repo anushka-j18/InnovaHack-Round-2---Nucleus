@@ -33,10 +33,11 @@ def validate(raw_text: str, compressed_text: str, qa_pairs: list[dict]) -> dict:
     Scores accuracy retention and tracks inference latency.
     """
     if not qa_pairs:
-        return {"accuracy_retained": None, "providerUsed": None, "latency_speedup_ratio": None}
+        return {"accuracy_retained": None, "providerUsed": None, "latency_speedup_ratio": None, "validation_details": []}
         
     scores = []
     providers = []
+    details_list = []
     total_raw_time = 0.0
     total_compressed_time = 0.0
     
@@ -69,10 +70,17 @@ def validate(raw_text: str, compressed_text: str, qa_pairs: list[dict]) -> dict:
         scores.append(similarity)
         providers.append(p_comp)
         
+        details_list.append({
+            "question": question,
+            "answer_raw": answer_raw,
+            "answer_compressed": answer_compressed,
+            "match_score": round(similarity, 1)
+        })
+        
         logger.info(f"-> Match Score: {similarity:.1f}%")
         
     if not scores:
-        return {"accuracy_retained": None, "providerUsed": None, "latency_speedup_ratio": None, "latency_speedup_is_estimated": None}
+        return {"accuracy_retained": None, "providerUsed": None, "latency_speedup_ratio": None, "latency_speedup_is_estimated": None, "validation_details": []}
         
     avg_accuracy = sum(scores) / len(scores)
     # Most common provider used during the run
@@ -103,5 +111,6 @@ def validate(raw_text: str, compressed_text: str, qa_pairs: list[dict]) -> dict:
         "accuracy_retained": round(avg_accuracy, 1),
         "providerUsed": provider_used,
         "latency_speedup_ratio": speedup_ratio,
-        "latency_speedup_is_estimated": is_estimated
+        "latency_speedup_is_estimated": is_estimated,
+        "validation_details": details_list
     }

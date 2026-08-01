@@ -84,22 +84,21 @@ def detect_type(text: str) -> str:
 
 def chunk_text(text: str) -> List[Dict]:
     """
-    Split input text into semantically coherent chunks and keep track of original positions.
+    Split input text into semantically coherent chunks and keep track of original line indices.
     """
     if not text:
-        return [{"index": 0, "text": ""}]
+        return [{"index": 0, "text": "", "line_indices": []}]
 
     content_type = detect_type(text)
     lines = text.splitlines()
     chunks = []
     
     if content_type == "log":
-        # Group log lines into chunks of approx 800 chars (maintaining log entry boundaries)
         current_chunk = []
+        current_indices = []
         current_size = 0
         max_chunk_size = 800
         
-        # Match potential new log line patterns
         log_start_pattern = re.compile(
             r'^(\[?\d{4}[-/]\d{2}[-/]\d{2}|'
             r'\[?\d{2}:\d{2}:\d{2}|'
@@ -107,62 +106,108 @@ def chunk_text(text: str) -> List[Dict]:
             re.IGNORECASE
         )
         
-        for line in lines:
-            # If we see a log start indicator and current chunk is big enough, slice it
+        for idx, line in enumerate(lines):
             if log_start_pattern.match(line.strip()) and current_size > max_chunk_size:
-                chunks.append("\n".join(current_chunk))
+                chunks.append({
+                    "index": len(chunks),
+                    "text": "\n".join(current_chunk),
+                    "line_indices": current_indices
+                })
                 current_chunk = []
+                current_indices = []
                 current_size = 0
             current_chunk.append(line)
+            current_indices.append(idx)
             current_size += len(line) + 1
             
         if current_chunk:
-            chunks.append("\n".join(current_chunk))
+            chunks.append({
+                "index": len(chunks),
+                "text": "\n".join(current_chunk),
+                "line_indices": current_indices
+            })
             
     elif content_type == "code":
-        # Chunk on function/class boundaries
         boundary_pattern = re.compile(
             r'^\s*(def\s+\w+|class\s+\w+|function\s+\w*|export\s+(const|let|var|function|class)|async\s+function|public\s+class|private\s+class|public\s+static|struct\s+\w+|enum\s+\w+)'
         )
         
         current_chunk = []
+        current_indices = []
         current_size = 0
-        max_chunk_size = 800  # bytes/chars
+        max_chunk_size = 800
         
-        for line in lines:
+        for idx, line in enumerate(lines):
             if boundary_pattern.match(line) and current_size > max_chunk_size:
-                chunks.append("\n".join(current_chunk))
+                chunks.append({
+                    "index": len(chunks),
+                    "text": "\n".join(current_chunk),
+                    "line_indices": current_indices
+                })
                 current_chunk = []
+                current_indices = []
                 current_size = 0
             current_chunk.append(line)
+            current_indices.append(idx)
             current_size += len(line) + 1
             
         if current_chunk:
-            chunks.append("\n".join(current_chunk))
+            chunks.append({
+                "index": len(chunks),
+                "text": "\n".join(current_chunk),
+                "line_indices": current_indices
+            })
             
     else:  # Prose/text
-        # Chunk on paragraph breaks (\n\n)
-        paragraphs = text.split("\n\n")
         current_chunk = []
+        current_indices = []
         current_size = 0
         max_chunk_size = 2000
         
-        for para in paragraphs:
-            para_strip = para.strip()
-            if not para_strip:
-                continue
-            if current_size + len(para_strip) > max_chunk_size and current_chunk:
-                chunks.append("\n\n".join(current_chunk))
+        # Group lines into paragraphs first
+        paragraphs_lines = []
+        current_para = []
+        current_para_indices = []
+        for idx, line in enumerate(lines):
+            if not line.strip():
+                if current_para:
+                    paragraphs_lines.append((current_para, current_para_indices))
+                    current_para = []
+                    current_para_indices = []
+                paragraphs_lines.append(([line], [idx]))
+            else:
+                current_para.append(line)
+                current_para_indices.append(idx)
+        if current_para:
+            paragraphs_lines.append((current_para, current_para_indices))
+            
+        for para_lines, para_idxs in paragraphs_lines:
+            para_text = "\n".join(para_lines)
+            if current_size + len(para_text) > max_chunk_size and current_chunk:
+                chunks.append({
+                    "index": len(chunks),
+                    "text": "\n".join(current_chunk),
+                    "line_indices": current_indices
+                })
                 current_chunk = []
+                current_indices = []
                 current_size = 0
-            current_chunk.append(para_strip)
-            current_size += len(para_strip) + 2
+            current_chunk.extend(para_lines)
+            current_indices.extend(para_idxs)
+            current_size += len(para_text) + 2
             
         if current_chunk:
-            chunks.append("\n\n".join(current_chunk))
-            
-    # Fallback if no chunks were constructed (e.g. empty/short input)
-    if not chunks:
-        chunks = [text]
+            chunks.append({
+                "index": len(chunks),
+                "text": "\n".join(current_chunk),
+                "line_indices": current_indices
+            })
         
-    return [{"index": i, "text": chunk} for i, chunk in enumerate(chunks)]
+    if not chunks:
+        chunks = [{
+            "index": 0,
+            "text": text,
+            "line_indices": list(range(len(lines)))
+        }]
+        
+    return chunks

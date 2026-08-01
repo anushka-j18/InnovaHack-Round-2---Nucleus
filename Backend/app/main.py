@@ -38,6 +38,40 @@ RATE_LIMIT_WINDOW = 60  # seconds
 RATE_LIMIT_MAX_REQUESTS = 30
 request_history = {}
 
+# In-memory dictionary cache with max size 100
+COMPRESSION_CACHE = {}
+MAX_CACHE_SIZE = 100
+
+# In-memory metrics history
+METRICS_HISTORY = []
+MAX_METRICS_HISTORY = 100
+
+# Pricing table per 1M input tokens in USD
+PRICING_TABLE = {
+    "claude-3-5-sonnet": 3.00,
+    "claude-3-5-haiku": 0.80,
+    "gemini-2.5-flash": 0.075,
+    "gemini-2.5-pro": 1.25,
+    "gpt-4o": 2.50,
+    "gpt-4o-mini": 0.150,
+    "llama-3.3-70b": 0.59
+}
+
+def get_cache_key(req: CompressRequest) -> str:
+    import hashlib
+    sig_components = [
+        req.text,
+        str(req.aggressiveness),
+        str(req.keep_ratio),
+        str(req.target_token_budget),
+        str(req.target_model),
+        str(req.is_conversation),
+        str(req.redact_pii),
+        str([qa.question for qa in req.qa_pairs] if req.qa_pairs else [])
+    ]
+    sig_str = "||".join(sig_components)
+    return hashlib.sha256(sig_str.encode("utf-8")).hexdigest()
+
 @app.middleware("http")
 async def rate_limit_middleware(request: Request, call_next):
     if request.url.path.startswith("/compress"):
@@ -74,8 +108,22 @@ async def compress_endpoint(req: CompressRequest):
     try:
         logger.info("Received request on /compress endpoint")
         
+        # Check Cache
+        cache_key = get_cache_key(req)
+        if cache_key in COMPRESSION_CACHE:
+            logger.info("Serving response from cache")
+            return COMPRESSION_CACHE[cache_key]
+            
         # Run stage A, B, and C compression in threadpool (non-blocking)
-        result = await run_in_threadpool(compress, req.text)
+        result = await run_in_threadpool(
+            compress,
+            req.text,
+            keep_ratio=req.keep_ratio or 0.30,
+            aggressiveness=req.aggressiveness,
+            target_token_budget=req.target_token_budget,
+            is_conversation=req.is_conversation,
+            redact_pii=req.redact_pii
+        )
         
         # Check if local embedding model is a Mock (signaling Stage-1-only fallback)
         from app.compressor import get_model
@@ -91,6 +139,7 @@ async def compress_endpoint(req: CompressRequest):
         provider_used = None
         latency_speedup = None
         latency_speedup_is_estimated = None
+        validation_details = []
         
         if req.qa_pairs:
             qa_list = [pair.model_dump() for pair in req.qa_pairs]
@@ -101,17 +150,27 @@ async def compress_endpoint(req: CompressRequest):
             provider_used = validation_res["providerUsed"]
             latency_speedup = validation_res["latency_speedup_ratio"]
             latency_speedup_is_estimated = validation_res["latency_speedup_is_estimated"]
+            validation_details = validation_res["validation_details"]
             
-        # Cost saving calculation (Reference target model: Claude 3.5 Sonnet at $3.00/1M input tokens)
+        # Model-based pricing calculation
+        pricing_rate = 3.00  # Default to Claude 3.5 Sonnet
+        if req.target_model:
+            model_key = req.target_model.lower().strip()
+            # Match prefixes to support variations
+            for k, val in PRICING_TABLE.items():
+                if k in model_key or model_key in k:
+                    pricing_rate = val
+                    break
+                    
         tokens_saved = result["raw_tokens"] - result["compressed_tokens"]
-        cost_saved_usd = round(max(0.0, tokens_saved * (3.00 / 1_000_000)), 6)
+        cost_saved_usd = round(max(0.0, tokens_saved * (pricing_rate / 1_000_000)), 6)
         
         logger.info(
             f"Compression success: raw={result['raw_tokens']} -> comp={result['compressed_tokens']} "
             f"({result['compression_ratio']}% reduction) | cost_saved=${cost_saved_usd:.6f}"
         )
         
-        return CompressResponse(
+        response = CompressResponse(
             compressed_text=result["compressed_text"],
             raw_tokens=result["raw_tokens"],
             compressed_tokens=result["compressed_tokens"],
@@ -122,16 +181,49 @@ async def compress_endpoint(req: CompressRequest):
             providerUsed=provider_used,
             cost_saved_usd=cost_saved_usd,
             latency_speedup_ratio=latency_speedup,
-            latency_speedup_is_estimated=latency_speedup_is_estimated
+            latency_speedup_is_estimated=latency_speedup_is_estimated,
+            plain_english_summary=result["plain_english_summary"],
+            structured_diff=result["structured_diff"],
+            validation_details=validation_details
         )
+        
+        # Save to Cache
+        if len(COMPRESSION_CACHE) >= MAX_CACHE_SIZE:
+            first_key = next(iter(COMPRESSION_CACHE))
+            COMPRESSION_CACHE.pop(first_key, None)
+        COMPRESSION_CACHE[cache_key] = response
+        
+        # Save to Metrics History
+        run_metrics = {
+            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "raw_tokens": result["raw_tokens"],
+            "compressed_tokens": result["compressed_tokens"],
+            "compression_ratio": result["compression_ratio"],
+            "accuracy_retained": accuracy_retained,
+            "cost_saved_usd": cost_saved_usd,
+            "latency_speedup_ratio": latency_speedup,
+            "latency_speedup_is_estimated": latency_speedup_is_estimated,
+            "provider_used": provider_used or "mock"
+        }
+        METRICS_HISTORY.append(run_metrics)
+        if len(METRICS_HISTORY) > MAX_METRICS_HISTORY:
+            METRICS_HISTORY.pop(0)
+            
+        return response
     except Exception as e:
         logger.error(f"/compress failed internally: {e}")
         traceback.print_exc()
-        # Secure the error response to prevent raw trace leakage to clients
         raise HTTPException(
             status_code=500, 
             detail="Internal Server Error. Please check backend server logs for details."
         )
+
+@app.get("/metrics")
+async def get_metrics():
+    return {
+        "total_runs": len(METRICS_HISTORY),
+        "history": METRICS_HISTORY
+    }
 
 @app.get("/health")
 async def health():

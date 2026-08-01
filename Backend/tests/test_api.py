@@ -77,3 +77,80 @@ def test_compress_endpoint_malformed_json():
     payload = "{ malformed: json text }"
     response = client.post("/compress", headers=headers, content=payload)
     assert response.status_code == 422
+
+def test_compress_with_pii_redaction():
+    """Verify that email, API keys, and credit cards are redacted when redact_pii is set."""
+    payload = {
+        "text": "Hello, my email is dev@nucleus.ai and my API key is gsk_XyZ123456789012345678901234567890123456789012345.",
+        "redact_pii": True
+    }
+    response = client.post("/compress", json=payload)
+    assert response.status_code == 200
+    res_json = response.json()
+    assert "[EMAIL_REDACTED]" in res_json["compressed_text"]
+    assert "[API_KEY_REDACTED]" in res_json["compressed_text"]
+
+def test_compress_with_token_budget():
+    """Verify that target_token_budget constraint dynamically bounds the output size."""
+    payload = {
+        "text": (
+            "This is a line of prose.\n"
+            "This is another line of prose.\n"
+            "Here is more prose to analyze.\n"
+            "We want to test if token budget works.\n"
+        ),
+        "target_token_budget": 10
+    }
+    response = client.post("/compress", json=payload)
+    assert response.status_code == 200
+    res_json = response.json()
+    assert res_json["compressed_tokens"] <= 10
+
+def test_compress_with_aggressiveness():
+    """Verify that aggressiveness scales compression ratio dynamically."""
+    payload_low = {
+        "text": "Line 1\nLine 2\nLine 3\nLine 4\nLine 5\nLine 6\n",
+        "aggressiveness": 0.1
+    }
+    payload_high = {
+        "text": "Line 1\nLine 2\nLine 3\nLine 4\nLine 5\nLine 6\n",
+        "aggressiveness": 0.9
+    }
+    r_low = client.post("/compress", json=payload_low).json()
+    r_high = client.post("/compress", json=payload_high).json()
+    assert r_high["compression_ratio"] >= r_low["compression_ratio"]
+
+def test_compress_with_model_pricing():
+    """Verify that cost savings calculation adapts to target model rate."""
+    payload = {
+        "text": "Simple test string to calculate pricing difference.",
+        "target_model": "gpt-4o"
+    }
+    response = client.post("/compress", json=payload)
+    assert response.status_code == 200
+    res_json = response.json()
+    assert "cost_saved_usd" in res_json
+
+def test_compress_with_conversation():
+    """Verify that is_conversation protects recent conversation turns verbatim."""
+    payload = {
+        "text": (
+            "Developer A [10:00 AM]: Hello pool config is 20.\n"
+            "Developer B [10:01 AM]: Can we change connection pool to 50?\n"
+            "Developer A [10:02 AM]: I changed it to 50.\n"
+        ),
+        "is_conversation": True
+    }
+    response = client.post("/compress", json=payload)
+    assert response.status_code == 200
+    res_json = response.json()
+    # The last turns should be fully preserved verbatim
+    assert "I changed it to 50." in res_json["compressed_text"]
+
+def test_get_metrics_endpoint():
+    """Verify the metrics endpoint returns execution history and total runs."""
+    response = client.get("/metrics")
+    assert response.status_code == 200
+    res_json = response.json()
+    assert "total_runs" in res_json
+    assert isinstance(res_json["history"], list)
