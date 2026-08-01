@@ -62,7 +62,7 @@ export function EvaluationSummary({ data, className }: EvaluationSummaryProps) {
                 </Badge>
               </h3>
               <p className="text-xs text-slate-400">
-                System scorecard evaluated against GenAI context compression hackathon benchmarks.
+                System scorecard evaluated against GenAI context compression benchmarks.
               </p>
             </div>
           </div>
@@ -112,11 +112,11 @@ export function EvaluationSummary({ data, className }: EvaluationSummaryProps) {
               </h2>
             </div>
             <p className="text-xs text-slate-300 max-w-xl leading-relaxed">
-              Ultra-low resource context compression microservice. Ready for production deployment and hackathon live judge demonstrations.
+              Ultra-low resource context compression microservice. Engineered for high-throughput LLM prompt compression and production scale.
             </p>
           </div>
 
-          {/* 4 Summary Score Numbers & Hackathon Ready Badge */}
+          {/* 4 Summary Score Numbers & Production Ready Badge */}
           <div className="flex flex-wrap items-center gap-4 w-full md:w-auto justify-between md:justify-end">
             <div className="grid grid-cols-4 gap-3 text-center font-mono">
               <div className="p-2.5 rounded-xl bg-slate-950/80 border border-slate-800">
@@ -137,13 +137,13 @@ export function EvaluationSummary({ data, className }: EvaluationSummaryProps) {
               </div>
             </div>
 
-            {/* Glowing Hackathon Ready Badge */}
+            {/* Glowing Production Ready Badge */}
             <Badge
               variant="emerald"
               className="px-4 py-2 text-xs font-bold uppercase tracking-wider gap-2 bg-gradient-to-r from-emerald-500 to-teal-400 text-slate-950 shadow-[0_0_20px_rgba(38,208,124,0.5)] border-transparent"
             >
               <Check className="h-4 w-4 stroke-[3]" />
-              <span>Hackathon Ready</span>
+              <span>Production Ready</span>
             </Badge>
           </div>
         </div>
