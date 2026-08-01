@@ -6,8 +6,11 @@
   "scripts": {
     "dev:backend": "python3 -m uvicorn app.main:app --reload --port 8000",
     "dev:frontend": "npm run dev --prefix frontend",
-    "dev": "npx concurrently -k -p \"[{name}] text\" -n \"Backend,Frontend\" -c \"cyan,emerald\" \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev": "npx -y concurrently -k -n \"Backend,Frontend\" -c \"cyan,emerald\" \"npm run dev:backend\" \"npm run dev:frontend\"",
     "start": "npm run dev",
     "build:frontend": "npm run build --prefix frontend"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.4"
   }
 }
