@@ -1,23 +1,108 @@
-from pydantic import BaseModel, Field
-from typing import List, Optional
+import uuid
+from datetime import datetime
+from sqlalchemy import Column, String, Float, Integer, Text, DateTime, ForeignKey, Boolean, Index
+from sqlalchemy.orm import relationship
+from app.database import Base
 
-class QAPair(BaseModel):
-    question: str = Field(..., description="The validation question to run against original and compressed context")
-    expected_answer: Optional[str] = Field(None, description="Optional ground truth answer to compare against")
+class CompressionJob(Base):
+    """
+    Persisted compression run record storing context text, token counts, cost savings, and latency metrics.
+    """
+    __tablename__ = "compression_jobs"
 
-class CompressRequest(BaseModel):
-    text: str = Field(..., max_length=50000, description="The raw context text to be compressed (max 50,000 characters)")
-    qa_pairs: Optional[List[QAPair]] = Field(None, description="Optional list of QA pairs for accuracy retention validation")
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    dataset_name = Column(String(100), default="Context Prompt")
+    original_text = Column(Text, nullable=False)
+    compressed_text = Column(Text, nullable=False)
+    original_tokens = Column(Integer, nullable=False)
+    compressed_tokens = Column(Integer, nullable=False)
+    compression_ratio = Column(Float, nullable=False, index=True)
+    cost_saved_usd = Column(Float, default=0.0)
+    latency_ms = Column(Float, default=0.0)
+    latency_speedup = Column(Float, default=1.0)
+    semantic_accuracy = Column(Float, default=100.0)
+    provider_used = Column(String(50), default="groq", index=True)
+    status = Column(String(20), default="completed")
+    warning = Column(String(255), nullable=True)
 
-class CompressResponse(BaseModel):
-    compressed_text: str = Field(..., description="The compressed version of the input text")
-    raw_tokens: int = Field(..., description="Token count of the original context")
-    compressed_tokens: int = Field(..., description="Token count of the compressed context")
-    compression_ratio: float = Field(..., description="Percentage reduction in tokens (e.g. 70.5)")
-    accuracy_retained: Optional[float] = Field(None, description="Average semantic similarity percentage (0-100) between answers")
-    stage2_provider: Optional[str] = Field(None, description="Provider used for compression stage (e.g. 'groq' or 'stage1-only')")
-    validation_provider: Optional[str] = Field(None, description="Provider used for QA validation (e.g. 'claude', 'gemini')")
-    providerUsed: Optional[str] = Field(None, description="The provider used for validation QA (matching frontend/DB naming)")
-    cost_saved_usd: float = Field(..., description="Estimated cost savings in USD compared to raw context processing")
-    latency_speedup_ratio: Optional[float] = Field(None, description="Latency speedup ratio factor (e.g. 2.4x)")
-    latency_speedup_is_estimated: Optional[bool] = Field(None, description="Flag indicating if the latency speedup ratio was simulated/estimated")
+    # Relationships
+    evaluations = relationship("EvaluationResult", back_populates="compression_job", cascade="all, delete-orphan")
+    history_entries = relationship("History", back_populates="compression_job", cascade="all, delete-orphan")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "dataset_name": self.dataset_name,
+            "original_text": self.original_text,
+            "compressed_text": self.compressed_text,
+            "original_tokens": self.original_tokens,
+            "compressed_tokens": self.compressed_tokens,
+            "compression_ratio": self.compression_ratio,
+            "cost_saved_usd": self.cost_saved_usd,
+            "latency_ms": self.latency_ms,
+            "latency_speedup": self.latency_speedup,
+            "semantic_accuracy": self.semantic_accuracy,
+            "provider_used": self.provider_used,
+            "status": self.status,
+            "warning": self.warning,
+            "evaluations": [eval_res.to_dict() for eval_res in self.evaluations] if self.evaluations else [],
+        }
+
+
+class EvaluationResult(Base):
+    """
+    LLM Question-Answering reasoning evaluation record matching raw vs compressed context.
+    """
+    __tablename__ = "evaluation_results"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    compression_job_id = Column(String(36), ForeignKey("compression_jobs.id", ondelete="CASCADE"), index=True, nullable=False)
+    question = Column(Text, nullable=False)
+    original_answer = Column(Text, nullable=True)
+    compressed_answer = Column(Text, nullable=True)
+    similarity_score = Column(Float, default=1.0)
+    passed = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Relationship
+    compression_job = relationship("CompressionJob", back_populates="evaluations")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "compression_job_id": self.compression_job_id,
+            "question": self.question,
+            "original_answer": self.original_answer,
+            "compressed_answer": self.compressed_answer,
+            "similarity_score": self.similarity_score,
+            "passed": self.passed,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class History(Base):
+    """
+    Historical execution log index linking compression jobs.
+    """
+    __tablename__ = "history_records"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    compression_job_id = Column(String(36), ForeignKey("compression_jobs.id", ondelete="CASCADE"), index=True, nullable=False)
+    run_time = Column(Float, default=0.0)
+    notes = Column(String(255), nullable=True)
+
+    # Relationship
+    compression_job = relationship("CompressionJob", back_populates="history_entries")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "compression_job_id": self.compression_job_id,
+            "run_time": self.run_time,
+            "notes": self.notes,
+        }
+
+# Explicit Indexes for fast query performance
+Index("idx_jobs_created_ratio", CompressionJob.created_at.desc(), CompressionJob.compression_ratio.desc())
