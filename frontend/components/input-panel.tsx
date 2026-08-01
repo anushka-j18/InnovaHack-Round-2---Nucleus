@@ -15,6 +15,7 @@ import {
   Check,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { CompressButton } from "@/components/compress-button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
@@ -324,26 +325,12 @@ export function InputPanel({
           </div>
 
           {/* Action Submit Button */}
-          <Button
-            type="button"
-            variant="glow"
-            size="lg"
-            disabled={isLoading || charCount === 0 || isOverLimit}
+          <CompressButton
+            disabled={charCount === 0 || isOverLimit}
+            isLoading={isLoading}
             onClick={onCompress}
-            className="w-full sm:w-auto gap-2.5 font-semibold text-slate-950 shadow-[0_0_20px_-3px_rgba(38,208,124,0.4)] disabled:opacity-50"
-          >
-            {isLoading ? (
-              <>
-                <Zap className="h-4 w-4 animate-spin text-slate-950" />
-                <span>Compressing Context...</span>
-              </>
-            ) : (
-              <>
-                <Zap className="h-4 w-4 fill-slate-950 text-slate-950" />
-                <span>Compress Context</span>
-              </>
-            )}
-          </Button>
+            className="w-full sm:w-auto"
+          />
         </div>
 
         {/* Progress Bar Indicator */}
