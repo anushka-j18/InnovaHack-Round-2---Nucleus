@@ -1,6 +1,7 @@
 import json
 import os
 import sys
+import logging
 
 # Add current directory to path so we can import app
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -8,89 +9,107 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from app.compressor import compress
 from app.validator import validate
 
+# Set up logging to stdout
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+)
+logger = logging.getLogger("nucleus.verify_pipeline")
+
 def run_verification():
-    print("=" * 60)
-    print("NUCLEUS BACKEND VERIFICATION PIPELINE")
-    print("=" * 60)
+    logger.info("=" * 60)
+    logger.info("NUCLEUS BACKEND MULTIMODAL VERIFICATION PIPELINE")
+    logger.info("=" * 60)
     
     # Check PyTorch & CUDA Status
     try:
         import torch
         cuda_available = torch.cuda.is_available()
-        print(f"PyTorch Version: {torch.__version__}")
-        print(f"CUDA Available:  {cuda_available}")
+        logger.info(f"PyTorch Version: {torch.__version__}")
+        logger.info(f"CUDA Available:  {cuda_available}")
         if cuda_available:
-            print(f"GPU Name:        {torch.cuda.get_device_name(0)}")
+            logger.info(f"GPU Name:        {torch.cuda.get_device_name(0)}")
         else:
-            print("GPU Name:        N/A (Using CPU)")
+            logger.info("GPU Name:        N/A (Using CPU)")
     except ImportError:
-        print("PyTorch Version: Not Installed (Using CPU Fallback)")
-        print("CUDA Available:  False")
-        print("GPU Name:        N/A (Using CPU)")
-    print("-" * 60)
+        logger.info("PyTorch Version: Not Installed (Using CPU Fallback)")
+        logger.info("CUDA Available:  False")
+        logger.info("GPU Name:        N/A (Using CPU)")
+    logger.info("-" * 60)
     
-    # Load sample codebase
-    codebase_path = "sample_data/long_codebase.txt"
+    # Define verification runs (type, file path)
+    datasets = [
+        {"type": "code", "path": "sample_data/long_codebase.txt"},
+        {"type": "log", "path": "sample_data/sample_logs.txt"},
+        {"type": "prose", "path": "sample_data/sample_prose.txt"}
+    ]
+    
+    pipeline_success = True
+    
+    # 1. Run compression checks across Code, Logs, and Prose
+    for data in datasets:
+        logger.info(f"Processing content type: {data['type'].upper()} ({data['path']})")
+        if not os.path.exists(data['path']):
+            logger.error(f"Missing sample file: {data['path']}")
+            pipeline_success = False
+            continue
+            
+        with open(data['path'], "r", encoding="utf-8") as f:
+            text = f.read()
+            
+        result = compress(text)
+        tokens_saved = result["raw_tokens"] - result["compressed_tokens"]
+        cost_saved_usd = max(0.0, tokens_saved * (3.00 / 1_000_000))
+        
+        logger.info(f"[{data['type'].upper()}] Raw Tokens:        {result['raw_tokens']}")
+        logger.info(f"[{data['type'].upper()}] Compressed Tokens:   {result['compressed_tokens']}")
+        logger.info(f"[{data['type'].upper()}] Compression Ratio:   {result['compression_ratio']}% reduction")
+        logger.info(f"[{data['type'].upper()}] Cost Saved (Sonnet): ${cost_saved_usd:.6f}")
+        
+        if result["compression_ratio"] >= 70.0:
+            logger.info(f"SUCCESS: Compression target met for {data['type'].upper()}!")
+        else:
+            logger.warning(f"WARNING: Compression target NOT met for {data['type'].upper()} (under 70%).")
+            pipeline_success = False
+        logger.info("-" * 60)
+        
+    # 2. Run QA Answer Validation (on Code codebase)
+    logger.info("Running reasoning validation on CODE QA pairs...")
     qa_path = "sample_data/qa_pairs.json"
+    code_path = "sample_data/long_codebase.txt"
     
-    if not os.path.exists(codebase_path) or not os.path.exists(qa_path):
-        print("Error: Sample data files missing.")
-        return
+    if os.path.exists(qa_path) and os.path.exists(code_path):
+        with open(qa_path, "r", encoding="utf-8") as f:
+            qa_pairs = json.load(f)
+        with open(code_path, "r", encoding="utf-8") as f:
+            raw_text = f.read()
+            
+        # Get compressed version
+        result = compress(raw_text)
         
-    with open(codebase_path, "r", encoding="utf-8") as f:
-        raw_text = f.read()
+        # Validate QA pairs
+        validation_res = validate(raw_text, result["compressed_text"], qa_pairs)
         
-    with open(qa_path, "r", encoding="utf-8") as f:
-        qa_pairs = json.load(f)
+        logger.info(f"Accuracy Retained:   {validation_res['accuracy_retained']}%")
+        logger.info(f"Validation Provider: {validation_res['providerUsed']}")
+        logger.info(f"Latency Speedup:     {validation_res['latency_speedup_ratio']}x")
+        logger.info("=" * 60)
         
-    print(f"Loaded sample codebase ({len(raw_text)} characters)")
-    print(f"Loaded {len(qa_pairs)} validation QA pairs")
-    print("-" * 60)
-    
-    # Run Compression
-    print("Running context compression...")
-    result = compress(raw_text)
-    
-    # Local check for Mock fallback
-    from app.compressor import get_model
-    model_instance = get_model()
-    if model_instance.__class__.__name__ == "MockModel":
-        stage2_provider = "stage1-only"
+        if validation_res["accuracy_retained"] is not None and validation_res["accuracy_retained"] >= 95.0:
+            logger.info("SUCCESS: Downstream accuracy retention target (95%+) met!")
+        else:
+            logger.warning("WARNING: Accuracy retention below target (95.0%).")
+            pipeline_success = False
     else:
-        stage2_provider = "groq"
+        logger.error("Missing QA data or Code file for reasoning validation check.")
+        pipeline_success = False
         
-    # Cost saving calculation (Reference target model: Claude 3.5 Sonnet at $3.00/1M input tokens)
-    tokens_saved = result["raw_tokens"] - result["compressed_tokens"]
-    cost_saved_usd = max(0.0, tokens_saved * (3.00 / 1_000_000))
-    
-    print("\nCompression Results:")
-    print(f"Raw Tokens:          {result['raw_tokens']}")
-    print(f"Compressed Tokens:   {result['compressed_tokens']}")
-    print(f"Compression Ratio:   {result['compression_ratio']}% reduction")
-    print(f"Stage 2 Provider:    {stage2_provider}")
-    print(f"Cost Saved (Sonnet): ${cost_saved_usd:.6f}")
-    print("-" * 60)
-    
-    # Run Validation
-    print("Running QA answer validation...")
-    validation_res = validate(raw_text, result["compressed_text"], qa_pairs)
-    print(f"\nAccuracy Retained:   {validation_res['accuracy_retained']}%")
-    print(f"Validation Provider: {validation_res['providerUsed']}")
-    print(f"Latency Speedup:     {validation_res['latency_speedup_ratio']}x")
-    print("=" * 60)
-    
-    # Verify target targets are met
-    # Target: Compression ratio > 70% on mock dataset, accuracy > 95%
-    if result["compression_ratio"] >= 70.0:
-        print("SUCCESS: Target compression ratio (>70%) met!")
+    logger.info("=" * 60)
+    if pipeline_success:
+        logger.info("OVERALL PIPELINE STATUS: VERIFIED SUCCESSFUL")
     else:
-        print("WARNING: Compression ratio below target (70.0%).")
-        
-    if validation_res["accuracy_retained"] is not None and validation_res["accuracy_retained"] >= 95.0:
-        print("SUCCESS: Target accuracy retention (95%+) met!")
-    else:
-        print("WARNING: Accuracy retention below target (95.0%).")
-    print("=" * 60)
+        logger.warning("OVERALL PIPELINE STATUS: WARNING / DEGRADED")
+    logger.info("=" * 60)
 
 if __name__ == "__main__":
     run_verification()

@@ -181,7 +181,7 @@ def strip_filler(chunk_text: str, keep_ratio: float = KEEP_RATIO, floor_threshol
     subject to a floor so you never gut signature lines.
     """
     lines = chunk_text.splitlines()
-    if len(lines) <= 3:
+    if len(lines) <= 1:
         return chunk_text
         
     # Filter empty lines for TF-IDF mapping

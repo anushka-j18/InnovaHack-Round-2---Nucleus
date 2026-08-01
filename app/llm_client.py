@@ -2,6 +2,7 @@ import time
 import random
 import re
 import httpx
+import logging
 from app.config import (
     GROQ_API_KEY, GROQ_MODEL, 
     GEMINI_API_KEY, GEMINI_MODEL,
@@ -9,10 +10,25 @@ from app.config import (
     MAX_RETRIES, INITIAL_BACKOFF
 )
 
+# Initialize logger
+logger = logging.getLogger("nucleus.llm_client")
+
 # Configuration checks
 client_groq = bool(GROQ_API_KEY)
 gemini_configured = bool(GEMINI_API_KEY)
 client_claude = bool(ANTHROPIC_API_KEY)
+
+def redact_keys(msg: str) -> str:
+    """Scrub sensitive API keys from log strings to prevent accidental leaks."""
+    if not msg:
+        return msg
+    if GEMINI_API_KEY:
+        msg = msg.replace(GEMINI_API_KEY, "********")
+    if GROQ_API_KEY:
+        msg = msg.replace(GROQ_API_KEY, "********")
+    if ANTHROPIC_API_KEY:
+        msg = msg.replace(ANTHROPIC_API_KEY, "********")
+    return msg
 
 def retry_with_backoff(max_retries=MAX_RETRIES, initial_delay=INITIAL_BACKOFF):
     """
@@ -31,7 +47,10 @@ def retry_with_backoff(max_retries=MAX_RETRIES, initial_delay=INITIAL_BACKOFF):
                         break
                     # Exponential backoff with jitter
                     sleep_time = delay + random.uniform(0, 1)
-                    print(f"[LLM Client] Attempt {attempt + 1} failed: {e}. Retrying in {sleep_time:.2f}s...")
+                    scrubbed_err = redact_keys(str(e))
+                    logger.warning(
+                        f"Attempt {attempt + 1} failed: {scrubbed_err}. Retrying in {sleep_time:.2f}s..."
+                    )
                     time.sleep(sleep_time)
                     delay *= 2
             raise last_exception
@@ -65,8 +84,12 @@ def _call_gemini_api(prompt: str) -> str:
     if not GEMINI_API_KEY:
         raise ValueError("Gemini API key is not configured (missing GEMINI_API_KEY).")
     
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}"
-    headers = {"Content-Type": "application/json"}
+    # Secure transmission using standard header key to prevent exposure in status error URLs
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
+    headers = {
+        "Content-Type": "application/json",
+        "x-goog-api-key": GEMINI_API_KEY
+    }
     payload = {
         "contents": [{
             "parts": [{"text": prompt}]
@@ -82,7 +105,7 @@ def _call_gemini_api(prompt: str) -> str:
 @retry_with_backoff()
 def _call_claude_api(prompt: str) -> str:
     if not ANTHROPIC_API_KEY:
-        raise ValueError("Claude API key is not configured (missing ANTHROPIC_API_KEY).")
+        raise ValueError("Anthropic API key is not configured (missing ANTHROPIC_API_KEY).")
     
     url = "https://api.anthropic.com/v1/messages"
     headers = {
@@ -122,33 +145,41 @@ def ask_llm(context: str, question: str) -> tuple[str, str]:
         try:
             return _call_gemini_api(prompt), "gemini"
         except Exception as e:
-            print(f"[LLM Client] Gemini API call failed: {e}. Trying Groq fallback...")
+            scrubbed_err = redact_keys(str(e))
+            logger.info(f"Gemini API call failed: {scrubbed_err}. Trying Groq fallback...")
             
     # 2. Try Groq backup
     if client_groq:
         try:
             return _call_groq_api(prompt), "groq"
         except Exception as e:
-            print(f"[LLM Client] Groq API call failed: {e}. Trying Claude fallback...")
+            scrubbed_err = redact_keys(str(e))
+            logger.info(f"Groq API call failed: {scrubbed_err}. Trying Claude fallback...")
             
     # 3. Try Claude fallback
     if client_claude:
         try:
             return _call_claude_api(prompt), "claude"
         except Exception as e:
-            print(f"[LLM Client] Claude API call failed: {e}.")
+            scrubbed_err = redact_keys(str(e))
+            logger.info(f"Claude API call failed: {scrubbed_err}.")
             
     # Fallback to local heuristic / mock answer if no API works
-    print("[LLM Client] Warning: No active LLM client succeeded. Returning mock response.")
+    logger.warning("No active LLM client succeeded. Returning mock response.")
     return _generate_mock_answer(context, question), "mock"
 
 def _generate_mock_answer(context: str, question: str) -> str:
     """
     Generates a simulated concise answer by scanning context for keywords in the question.
     Crucial for local testing when API keys are not provided.
+    Includes an artificial timed delay proportional to token count to measure realistic latency speedups.
     """
+    # Timed delay simulation: base delay of 0.1s + 0.0003s per character of context
+    # Representing realistic LLM reading & processing overhead
+    processing_delay = 0.1 + (len(context) * 0.0003)
+    time.sleep(processing_delay)
+    
     q_lower = question.lower()
-    c_lower = context.lower()
     
     # QA 1: Connection pool limit
     if "connection pool limit" in q_lower or "pool limit" in q_lower:

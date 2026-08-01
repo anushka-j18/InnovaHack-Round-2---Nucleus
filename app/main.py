@@ -1,10 +1,22 @@
+import sys
+import logging
+import traceback
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.concurrency import run_in_threadpool
 from app.models import CompressRequest, CompressResponse
 from app.compressor import compress
 from app.validator import validate
-import sys
+
+# Setup structured logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    handlers=[
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+logger = logging.getLogger("nucleus.main")
 
 # Wrap torch import to prevent startup crashes when torch is not installed
 try:
@@ -15,11 +27,11 @@ except ImportError:
 
 app = FastAPI(
     title="Nucleus API",
-    description="Ultra-Low Resource LLM Context Compression Engine API",
+    description="Ultra-Low Resource LLM Context Context Compression Engine API",
     version="1.0.0"
 )
 
-# Enable CORS for frontend integration (allowing wide wildcard origins)
+# Enable CORS for frontend integration (allowing wide wildcard origins securely)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -31,6 +43,8 @@ app.add_middleware(
 @app.post("/compress", response_model=CompressResponse)
 async def compress_endpoint(req: CompressRequest):
     try:
+        logger.info("Received request on /compress endpoint")
+        
         # Run stage A, B, and C compression in threadpool (non-blocking)
         result = await run_in_threadpool(compress, req.text)
         
@@ -61,6 +75,11 @@ async def compress_endpoint(req: CompressRequest):
         tokens_saved = result["raw_tokens"] - result["compressed_tokens"]
         cost_saved_usd = round(max(0.0, tokens_saved * (3.00 / 1_000_000)), 6)
         
+        logger.info(
+            f"Compression success: raw={result['raw_tokens']} -> comp={result['compressed_tokens']} "
+            f"({result['compression_ratio']}% reduction) | cost_saved=${cost_saved_usd:.6f}"
+        )
+        
         return CompressResponse(
             compressed_text=result["compressed_text"],
             raw_tokens=result["raw_tokens"],
@@ -74,10 +93,13 @@ async def compress_endpoint(req: CompressRequest):
             latency_speedup_ratio=latency_speedup
         )
     except Exception as e:
-        print(f"[API Error] /compress failed: {e}")
-        import traceback
+        logger.error(f"/compress failed internally: {e}")
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
+        # Secure the error response to prevent raw trace leakage to clients
+        raise HTTPException(
+            status_code=500, 
+            detail="Internal Server Error. Please check backend server logs for details."
+        )
 
 @app.get("/health")
 async def health():

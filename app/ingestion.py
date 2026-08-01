@@ -94,10 +94,10 @@ def chunk_text(text: str) -> List[Dict]:
     chunks = []
     
     if content_type == "log":
-        # Group log lines into chunks of approx 200 chars (maintaining log entry boundaries)
+        # Group log lines into chunks of approx 800 chars (maintaining log entry boundaries)
         current_chunk = []
         current_size = 0
-        max_chunk_size = 200
+        max_chunk_size = 800
         
         # Match potential new log line patterns
         log_start_pattern = re.compile(
@@ -127,7 +127,7 @@ def chunk_text(text: str) -> List[Dict]:
         
         current_chunk = []
         current_size = 0
-        max_chunk_size = 200  # bytes/chars
+        max_chunk_size = 800  # bytes/chars
         
         for line in lines:
             if boundary_pattern.match(line) and current_size > max_chunk_size:
