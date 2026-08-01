@@ -178,7 +178,7 @@ def compute_pure_tfidf_scores(clean_lines: list[str]) -> dict:
 def strip_filler(chunk_text: str, keep_ratio: float = KEEP_RATIO, floor_threshold: float = 0.6) -> str:
     """
     Strips the least informative lines (bottom N% based on TF-IDF scoring)
-    subject to a floor so you never gut anything with named entities/numbers/code symbols.
+    subject to a floor so you never gut signature lines.
     """
     lines = chunk_text.splitlines()
     if len(lines) <= 3:
@@ -196,9 +196,7 @@ def strip_filler(chunk_text: str, keep_ratio: float = KEEP_RATIO, floor_threshol
         # Fallback to word count if it somehow fails
         line_scores = {line: float(len(line.split())) for line in clean_lines}
         
-
-            
-    # Heuristics for structural "floor protection" (protecting code syntax, IDs, numbers, and variables)
+    # Heuristics for structural "floor protection"
     code_pattern = re.compile(
         r'(\bdef\b|\bclass\b|\breturn\b|\bimport\b|\bfrom\b|=|\{|\}|\[|\]|\(|\))'
     )
@@ -206,17 +204,27 @@ def strip_filler(chunk_text: str, keep_ratio: float = KEEP_RATIO, floor_threshol
     named_entity_pattern = re.compile(r'\b[A-Z][a-zA-Z0-9_]+\b')
     comment_pattern = re.compile(r'^\s*(#|//|/\*|\*)')
     
+    # Absolute signature and import patterns for hard keep-list (always preserve)
+    signature_pattern = re.compile(
+        r'^\s*(def\s+\w+|class\s+\w+|async\s+def\s+\w+|from\s+\w+\s+import|import\s+\w+)'
+    )
+    
+    hard_keep_indices = set()
     scored_lines = []
+    
     for i, line in enumerate(lines):
         stripped = line.strip()
         if not stripped:
-            # Keep empty lines unconditionally to preserve code/log block layout
-            scored_lines.append((i, line, 999.0))
+            continue
+            
+        # Hard keep signatures and imports immediately (bypass scoring/sorting)
+        if signature_pattern.match(stripped):
+            hard_keep_indices.add(i)
             continue
             
         base_score = line_scores.get(stripped, 0.0)
         
-        # Apply boosts to protect critical details
+        # Apply boosts to protect critical details in remaining lines
         boost = 0.0
         if comment_pattern.match(stripped):
             boost -= 0.5  # Soft penalty for comment noise
@@ -229,30 +237,34 @@ def strip_filler(chunk_text: str, keep_ratio: float = KEEP_RATIO, floor_threshol
                 boost += 0.5  # High protection for metrics, IDs, ports, timestamps
             if named_entity_pattern.search(stripped):
                 boost += 0.4  # High protection for classes/constants/variables/exceptions
-            # Absolute protection for signature lines
-            if re.match(r'^\s*(def\s+\w+|class\s+\w+|async\s+def\s+\w+)', stripped):
-                boost += 1.5
             
         final_score = base_score + boost
         scored_lines.append((i, line, final_score))
         
-    # Sort non-empty lines to drop the lowest scored ones
-    non_empty_scored = [item for item in scored_lines if item[1].strip()]
-    non_empty_scored.sort(key=lambda x: x[2])
+    # Sort non-empty scored content lines to drop the lowest scored ones
+    scored_lines.sort(key=lambda x: x[2])
     
-    num_to_keep = max(1, int(len(non_empty_scored) * keep_ratio))
-    keep_indices = {item[0] for item in non_empty_scored[-num_to_keep:]}
+    total_non_empty = len(clean_lines)
+    num_to_keep = max(1, int(total_non_empty * keep_ratio))
     
-    # Floor protection: always keep lines with score >= floor_threshold (signatures, configs, exceptions)
+    # Deduct the hard-kept lines from the budget we need to select by score
+    selected_indices = set(hard_keep_indices)
+    
+    # Select from the scored list to fill the remaining budget
+    remaining_budget = max(0, num_to_keep - len(selected_indices))
+    if remaining_budget > 0:
+        for item in scored_lines[-remaining_budget:]:
+            selected_indices.add(item[0])
+            
+    # Floor protection: always keep scored lines with score >= floor_threshold
     for idx, line, score in scored_lines:
-        if line.strip() and score >= floor_threshold:
-            keep_indices.add(idx)
+        if score >= floor_threshold:
+            selected_indices.add(idx)
             
     # Reconstruct the block preserving relative ordering and spacing
     final_lines = []
-    for item in scored_lines:
-        idx, line, score = item
-        if not line.strip() or idx in keep_indices:
+    for i, line in enumerate(lines):
+        if not line.strip() or i in selected_indices:
             final_lines.append(line)
             
     return "\n".join(final_lines)
