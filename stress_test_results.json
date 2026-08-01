@@ -1,0 +1,104 @@
+{
+  "test1": {
+    "name": "Large Python Codebase",
+    "raw_tokens": 1379,
+    "compressed_tokens": 456,
+    "ratio": 66.9,
+    "cost_saved": 0.002769,
+    "latency_ms": 9098.71,
+    "accuracy": 65.3,
+    "pass": false
+  },
+  "test2": {
+    "name": "Customer Support Chat History",
+    "raw_tokens": 3106,
+    "compressed_tokens": 392,
+    "ratio": 87.4,
+    "cost_saved": 0.008142,
+    "latency_ms": 1093.63,
+    "accuracy": 72.1,
+    "pass": false
+  },
+  "test3": {
+    "name": "Software Documentation",
+    "raw_tokens": 574,
+    "compressed_tokens": 159,
+    "ratio": 72.3,
+    "cost_saved": 0.001245,
+    "latency_ms": 727.74,
+    "accuracy": 49.0,
+    "pass": false
+  },
+  "test4": {
+    "name": "Server Logs",
+    "raw_tokens": 17220,
+    "compressed_tokens": 900,
+    "ratio": 94.8,
+    "cost_saved": 0.04896,
+    "latency_ms": 1828.41,
+    "accuracy": 74.3,
+    "pass": false
+  },
+  "test5": {
+    "name": "Mixed Enterprise Context",
+    "raw_tokens": 5854,
+    "compressed_tokens": 1593,
+    "ratio": 72.8,
+    "cost_saved": 0.012783,
+    "latency_ms": 1360.6,
+    "accuracy": 53.1,
+    "pass": false
+  },
+  "test6": {
+    "name": "Extremely Large Prompt",
+    "raw_tokens": 8840,
+    "compressed_tokens": 1887,
+    "ratio": 78.7,
+    "cost_saved": 0.020859,
+    "latency_ms": 735.92,
+    "accuracy": 19.1,
+    "mem_mb": 769.11,
+    "pass": true
+  },
+  "test7": {
+    "avg_accuracy": 55.5,
+    "pass": false
+  },
+  "test8": {
+    "passed": 18,
+    "total": 18,
+    "pass": true
+  },
+  "test9": {
+    "passed": 6,
+    "total": 7,
+    "pass": false
+  },
+  "test10": {
+    "b100": {
+      "concurrency": 100,
+      "total_time_sec": 0.12,
+      "avg_latency_ms": 0.0,
+      "p95_ms": 0.0,
+      "p99_ms": 0.0,
+      "failures": 100
+    },
+    "b500": {
+      "concurrency": 500,
+      "total_time_sec": 0.63,
+      "avg_latency_ms": 0.0,
+      "p95_ms": 0.0,
+      "p99_ms": 0.0,
+      "failures": 500
+    },
+    "b1000": {
+      "concurrency": 1000,
+      "total_time_sec": 1.42,
+      "avg_latency_ms": 0.0,
+      "p95_ms": 0.0,
+      "p99_ms": 0.0,
+      "failures": 1000
+    },
+    "pass": false
+  }
+}
