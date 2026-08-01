@@ -5,11 +5,8 @@ import {
   Split,
   Copy,
   Check,
-  Eye,
   FileText,
   Minimize2,
-  Filter,
-  Sparkles,
 } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";

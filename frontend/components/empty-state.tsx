@@ -7,11 +7,9 @@ import {
   AlertCircle,
   FileText,
   RefreshCw,
-  ArrowRight,
 } from "lucide-react";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
 interface EmptyStateProps {

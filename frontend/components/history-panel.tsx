@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { History, Clock, ArrowRight, Minimize2, Check, RefreshCw, Trash2 } from "lucide-react";
+import { History, Clock, ArrowRight, Minimize2, Trash2 } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";

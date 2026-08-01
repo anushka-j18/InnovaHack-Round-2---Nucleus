@@ -5,14 +5,8 @@ import {
   Upload,
   FileText,
   Trash2,
-  Zap,
   AlertCircle,
-  Code,
-  Terminal,
-  FileCheck,
-  Sparkles,
   FileUp,
-  Check,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CompressButton } from "@/components/compress-button";
@@ -40,7 +34,6 @@ export function InputPanel({
   setError,
 }: InputPanelProps) {
   const [isDragging, setIsDragging] = React.useState(false);
-  const [copied, setCopied] = React.useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   // Live metrics calculations

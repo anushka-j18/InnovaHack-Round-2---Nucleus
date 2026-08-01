@@ -1,8 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { BarChart2, Clock, Zap, Percent, ShieldCheck } from "lucide-react";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { BarChart2, Clock, Percent } from "lucide-react";
+import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { CompressResponse } from "@/lib/api";

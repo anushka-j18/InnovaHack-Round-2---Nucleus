@@ -100,7 +100,7 @@ export async function compress(payload: CompressRequest): Promise<CompressRespon
           if (typeof errorJson.detail === "string") {
             errorDetail = errorJson.detail;
           } else if (Array.isArray(errorJson.detail)) {
-            errorDetail = errorJson.detail.map((err: any) => err.msg || JSON.stringify(err)).join(", ");
+            errorDetail = errorJson.detail.map((err: { msg?: string }) => err.msg || JSON.stringify(err)).join(", ");
           }
         }
       } catch {
