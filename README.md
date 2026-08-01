@@ -1,6 +1,6 @@
-# Nucleus Backend - Testing & Execution Guide
+# Nucleus Backend - Context Compression Engine
 
-This guide explains how to install dependencies, run the test suite, execute the verification pipeline, and start the local API server for the **Nucleus Context Compression Engine**.
+Nucleus is an ultra-low-resource context compression engine designed to shrink LLM prompts by over 70% while maintaining >95% reasoning accuracy, enabling rapid, cost-effective inference on large codebases, customer logs, and prose contexts.
 
 ---
 
