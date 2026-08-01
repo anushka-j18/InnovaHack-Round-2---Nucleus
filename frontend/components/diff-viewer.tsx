@@ -19,6 +19,27 @@ interface DiffViewerProps {
   className?: string;
 }
 
+// Heuristic to assign Removal Reason Badges to stripped lines
+function getRemovalReason(line: string): string {
+  const trimmed = line.trim();
+  if (trimmed.startsWith("#") || trimmed.startsWith("//") || trimmed.startsWith("/*") || trimmed.startsWith("*")) {
+    return "Repeated Comment";
+  }
+  if (trimmed.startsWith("import ") || trimmed.startsWith("from ") || trimmed.includes("require(")) {
+    return "Duplicate Import";
+  }
+  if (trimmed.match(/^(\[?\d{4}|\d{2}:\d{2}|\[?(INFO|DEBUG|TRACE)\]?)/i)) {
+    return "Repeated Log";
+  }
+  if (trimmed.includes("logger.") || trimmed.includes("console.log") || trimmed.includes("print(")) {
+    return "Verbose Logging";
+  }
+  if (trimmed.length < 5 || trimmed.startsWith("pass") || trimmed.startsWith("return None")) {
+    return "Low Importance";
+  }
+  return "Boilerplate / Filler";
+}
+
 export function DiffViewer({
   originalText,
   compressedText,
@@ -44,7 +65,6 @@ export function DiffViewer({
     }
   };
 
-  // Compute diff line statuses for unified view
   const diffLines = React.useMemo(() => {
     return rawLines.map((line, index) => {
       const trimmed = line.trim();
@@ -53,6 +73,7 @@ export function DiffViewer({
         lineNum: index + 1,
         content: line,
         status: isKept ? ("kept" as const) : ("removed" as const),
+        reason: isKept ? null : getRemovalReason(line),
       };
     });
   }, [rawLines, compSet]);
@@ -64,7 +85,7 @@ export function DiffViewer({
   }, [diffLines, filterMode]);
 
   return (
-    <Card variant="glass" className={cn("w-full border-slate-800/80 bg-slate-900/60 p-0 overflow-hidden shadow-2xl", className)}>
+    <Card className={cn("w-full border-slate-800/80 bg-slate-900/60 p-0 overflow-hidden shadow-2xl backdrop-blur-xl", className)}>
       {/* Header Controls */}
       <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-slate-800/80 p-5 bg-slate-950/40">
         <div className="flex items-center gap-3">
@@ -73,18 +94,18 @@ export function DiffViewer({
           </div>
           <div>
             <CardTitle className="text-base font-semibold text-slate-100 flex items-center gap-2">
-              Before & After Context Diff Viewer
+              Before & After Line Diff Viewer
               <Badge variant="emerald" className="text-[10px]">
-                Interactive Diff
+                Reason Badges Enabled
               </Badge>
             </CardTitle>
             <p className="text-xs text-slate-400">
-              Visual line comparison: <span className="text-emerald-400 font-medium">Green</span> = Retained signature lines | <span className="text-red-400 font-medium">Red</span> = Stripped filler lines.
+              Annotated line comparison: <span className="text-emerald-400 font-medium">Green</span> = Retained signature | <span className="text-red-400 font-medium">Red</span> = Stripped line with reason badge.
             </p>
           </div>
         </div>
 
-        {/* Controls: View Mode & Line Filter Toggle */}
+        {/* View Controls */}
         <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
           {/* View Mode Toggle */}
           <div className="flex items-center gap-1 rounded-lg bg-slate-950/80 p-1 border border-slate-800 text-xs">
@@ -121,7 +142,7 @@ export function DiffViewer({
                 filterMode === "all" ? "bg-slate-800 text-slate-100 font-medium" : "text-slate-400"
               )}
             >
-              All Lines
+              All
             </button>
             <button
               onClick={() => setFilterMode("kept")}
@@ -145,10 +166,9 @@ export function DiffViewer({
         </div>
       </CardHeader>
 
-      {/* Main Diff Display Body */}
+      {/* Main Diff Display */}
       <CardContent className="p-0">
         {viewMode === "split" ? (
-          /* Side-by-Side View */
           <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-slate-800">
             {/* Left Panel: Original Context */}
             <div className="flex flex-col h-[400px]">
@@ -177,27 +197,34 @@ export function DiffViewer({
                 </Button>
               </div>
 
-              {/* Scrollable Text Area */}
               <div className="flex-1 overflow-auto p-4 font-mono text-xs leading-relaxed bg-slate-950/60 select-text">
-                {rawLines.map((line, idx) => {
-                  const isKept = compSet.has(line.trim()) || line.trim() === "";
-                  return (
-                    <div
-                      key={idx}
-                      className={cn(
-                        "flex items-start px-2 py-0.5 rounded transition-colors",
-                        isKept
-                          ? "bg-emerald-500/10 text-emerald-200 border-l-2 border-emerald-500/60"
-                          : "bg-red-500/10 text-red-300/80 border-l-2 border-red-500/40 line-through opacity-75"
-                      )}
-                    >
-                      <span className="w-8 shrink-0 text-slate-600 select-none text-right pr-3 font-sans">
-                        {idx + 1}
+                {diffLines.map((line, idx) => (
+                  <div
+                    key={idx}
+                    className={cn(
+                      "flex items-center justify-between px-2 py-1 rounded transition-colors mb-0.5",
+                      line.status === "kept"
+                        ? "bg-emerald-500/10 text-emerald-200 border-l-2 border-emerald-500/60"
+                        : "bg-red-500/10 text-red-300/80 border-l-2 border-red-500/40 opacity-80"
+                    )}
+                  >
+                    <div className="flex items-center gap-2 overflow-hidden">
+                      <span className="w-8 shrink-0 text-slate-600 select-none text-right pr-2 font-sans">
+                        {line.lineNum}
                       </span>
-                      <span className="whitespace-pre-wrap break-all">{line || " "}</span>
+                      <span className={cn("whitespace-pre-wrap break-all", line.status === "removed" && "line-through")}>
+                        {line.content || " "}
+                      </span>
                     </div>
-                  );
-                })}
+
+                    {/* Inline Removal Reason Badge */}
+                    {line.status === "removed" && line.reason && (
+                      <span className="shrink-0 rounded bg-red-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-red-300 border border-red-500/30 uppercase tracking-wider ml-2">
+                        {line.reason}
+                      </span>
+                    )}
+                  </div>
+                ))}
               </div>
             </div>
 
@@ -228,14 +255,13 @@ export function DiffViewer({
                 </Button>
               </div>
 
-              {/* Scrollable Text Area */}
               <div className="flex-1 overflow-auto p-4 font-mono text-xs leading-relaxed bg-slate-950/80 select-text">
                 {compLines.map((line, idx) => (
                   <div
                     key={idx}
-                    className="flex items-start px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-200 border-l-2 border-emerald-500/60 mb-0.5"
+                    className="flex items-start px-2 py-1 rounded bg-emerald-500/10 text-emerald-200 border-l-2 border-emerald-500/60 mb-0.5"
                   >
-                    <span className="w-8 shrink-0 text-slate-600 select-none text-right pr-3 font-sans">
+                    <span className="w-8 shrink-0 text-slate-600 select-none text-right pr-2 font-sans">
                       {idx + 1}
                     </span>
                     <span className="whitespace-pre-wrap break-all">{line || " "}</span>
@@ -245,27 +271,35 @@ export function DiffViewer({
             </div>
           </div>
         ) : (
-          /* Unified Diff View */
+          /* Unified Diff View with Reason Badges */
           <div className="h-[450px] overflow-auto p-4 font-mono text-xs leading-relaxed bg-slate-950/80 select-text">
             {filteredDiffLines.map((line, idx) => (
               <div
                 key={idx}
                 className={cn(
-                  "flex items-start px-3 py-1 rounded mb-0.5 transition-colors",
+                  "flex items-center justify-between px-3 py-1 rounded mb-0.5 transition-colors",
                   line.status === "kept"
                     ? "bg-emerald-500/10 text-emerald-200 border-l-2 border-emerald-500/80"
                     : "bg-red-500/15 text-red-300 border-l-2 border-red-500/80 opacity-80"
                 )}
               >
-                <span className="w-10 shrink-0 text-slate-600 select-none text-right pr-3 font-sans">
-                  {line.lineNum}
-                </span>
-                <span className="w-6 shrink-0 font-bold select-none">
-                  {line.status === "kept" ? "+" : "-"}
-                </span>
-                <span className={cn("whitespace-pre-wrap break-all", line.status === "removed" && "line-through")}>
-                  {line.content || " "}
-                </span>
+                <div className="flex items-center gap-2 overflow-hidden">
+                  <span className="w-8 shrink-0 text-slate-600 select-none text-right pr-2 font-sans">
+                    {line.lineNum}
+                  </span>
+                  <span className="w-4 shrink-0 font-bold select-none">
+                    {line.status === "kept" ? "+" : "-"}
+                  </span>
+                  <span className={cn("whitespace-pre-wrap break-all", line.status === "removed" && "line-through")}>
+                    {line.content || " "}
+                  </span>
+                </div>
+
+                {line.status === "removed" && line.reason && (
+                  <span className="shrink-0 rounded bg-red-500/20 px-2 py-0.5 text-[10px] font-semibold text-red-300 border border-red-500/30 uppercase tracking-wider ml-2">
+                    {line.reason}
+                  </span>
+                )}
               </div>
             ))}
           </div>

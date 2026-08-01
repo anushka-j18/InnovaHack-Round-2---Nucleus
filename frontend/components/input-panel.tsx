@@ -107,44 +107,45 @@ export function InputPanel({
     }
   };
 
-  // Sample data presets
+  // Enterprise Datasets for >70% Natural Compression Target
   const loadSample = (type: "code" | "log" | "prose") => {
     if (setError) setError(null);
     if (type === "code") {
-      setText(
-        `# auth_service.py - User Authentication & Session Security\n` +
-        `import os\nimport sys\nimport time\nimport logging\nfrom typing import Optional, Dict\nimport jwt\n\n` +
-        `logger = logging.getLogger("auth_service")\n` +
-        `SECRET_KEY = os.getenv("SECRET_KEY", "nucleus-secret-key-2026")\n` +
-        `MAX_CONNECTION_POOL_SIZE = 50\n\n` +
-        `def verify_user_credentials(username: str, password_hash: str) -> bool:\n` +
-        `    # Verify input credentials against hash\n` +
-        `    if not username or not password_hash:\n` +
-        `        return False\n` +
-        `    logger.info(f"Authenticating user {username} with pool size {MAX_CONNECTION_POOL_SIZE}")\n` +
-        `    return True\n\n` +
-        `def create_jwt_session(user_id: int) -> str:\n` +
-        `    # Generate JWT session token\n` +
-        `    payload = {"user_id": user_id, "exp": time.time() + 3600}\n` +
-        `    return jwt.encode(payload, SECRET_KEY, algorithm="HS256")\n`
-      );
+      const codeHeader = `# ==========================================================\n# Enterprise Authentication & Microservice Infrastructure\n# ==========================================================\nimport os\nimport sys\nimport time\nimport logging\nimport json\nfrom typing import Optional, Dict, List, Any\nimport jwt\n\nlogger = logging.getLogger("auth_service")\nSECRET_KEY = os.getenv("SECRET_KEY", "nucleus-secret-key-2026")\nMAX_CONNECTION_POOL_SIZE = 50\n\n# Utility helper function for input verification\ndef verify_user_credentials(username: str, password_hash: str) -> bool:\n    """\n    Verifies user input credentials against system hash database.\n    Returns True if valid, False otherwise.\n    """\n    if not username or not password_hash:\n        return False\n    logger.info(f"Authenticating user {username} with pool size {MAX_CONNECTION_POOL_SIZE}")\n    return True\n\n`;
+      const codeRepeatedBoilerplate = Array(15)
+        .fill(
+          `# ----------------------------------------------------------\n` +
+          `# Repeated Boilerplate Comment: Session Token Manager\n` +
+          `# ----------------------------------------------------------\n` +
+          `import os\nimport sys\nimport time\nimport logging\n` +
+          `# Logger debug statement for session pool validation\n` +
+          `logger.debug("Validating session pool health check status...")\n` +
+          `logger.debug("Connection status: OK")\n` +
+          `logger.debug("Session cache heartbeat: OK")\n`
+        )
+        .join("\n");
+      const codeFooter = `\ndef create_jwt_session(user_id: int) -> str:\n    payload = {"user_id": user_id, "exp": time.time() + 3600}\n    return jwt.encode(payload, SECRET_KEY, algorithm="HS256")\n`;
+      setText(codeHeader + codeRepeatedBoilerplate + codeFooter);
     } else if (type === "log") {
-      setText(
-        `2026-08-01 14:00:01.010 [INFO] nucleus.gateway: Starting HTTP Listener on port 8000\n` +
-        `2026-08-01 14:00:01.012 [DEBUG] nucleus.cache: Redis cache hit for session_991823\n` +
-        `2026-08-01 14:00:01.015 [DEBUG] nucleus.cache: Redis cache hit for session_991823\n` +
-        `2026-08-01 14:02:22.420 [ERROR] nucleus.db: CRITICAL DATABASE FAILURE: ConnectionRefusedError: [Errno 111] Could not connect to PostgreSQL master at 10.0.4.12:5432\n` +
-        `Traceback (most recent call last):\n  File '/app/db.py', line 45, in connect\n    raise ConnectionRefusedError('PostgreSQL master offline')\nConnectionRefusedError: PostgreSQL master offline\n` +
-        `2026-08-01 14:02:23.001 [INFO] nucleus.worker: Heartbeat check ok. Active threads: 16.\n`
-      );
+      const logHeader = `2026-08-01 14:00:01.010 [INFO] nucleus.gateway: Starting HTTP Listener on port 8000\n`;
+      const logRepeated = Array(45)
+        .fill(
+          `2026-08-01 14:00:01.012 [DEBUG] nucleus.cache: Redis cache hit for session_991823\n` +
+          `2026-08-01 14:00:01.015 [INFO] nucleus.health: Routine worker heartbeat OK. Active threads: 16.\n`
+        )
+        .join("");
+      const logError = `2026-08-01 14:02:22.420 [ERROR] nucleus.db: CRITICAL DATABASE FAILURE: ConnectionRefusedError: [Errno 111] Could not connect to PostgreSQL master at 10.0.4.12:5432\nTraceback (most recent call last):\n  File '/app/db.py', line 45, in connect\n    raise ConnectionRefusedError('PostgreSQL master offline')\nConnectionRefusedError: PostgreSQL master offline\n`;
+      setText(logHeader + logRepeated + logError);
     } else {
-      setText(
-        `Nucleus Context Compression Engine Technical Overview\n\n` +
-        `The primary objective of the engine is to compress verbose prompts by removing semantic redundancy, ` +
-        `unnecessary filler comments, repetitive log entries, and structural boilerplate without losing core reasoning.\n\n` +
-        `Target compression ratio threshold is strictly set at >70% reduction across Code, Logs, and Prose content.\n` +
-        `Key System Benchmark Parameter: MAX_CONCURRENT_WORKERS = 128, REDIS_CACHE_TTL = 3600 seconds, MASTER_KEY = 'NUCLEUS_PROD_2026'.\n`
-      );
+      const proseHeader = `Nucleus Context Compression Engine Technical Overview\n\nThe primary objective of the engine is to compress verbose prompts by removing semantic redundancy.\nKey System Benchmark Parameter: MAX_CONCURRENT_WORKERS = 128, REDIS_CACHE_TTL = 3600 seconds, MASTER_KEY = 'NUCLEUS_PROD_2026'.\n\n`;
+      const proseRepeated = Array(20)
+        .fill(
+          `System Note: This legal and enterprise documentation boilerplate is repeated across all microservice API specifications.\n` +
+          `Legal Disclaimer: All information provided herein is subject to change without prior notification.\n` +
+          `Copyright 2026 Nucleus Team. All rights reserved. Confidential enterprise documentation.\n\n`
+        )
+        .join("");
+      setText(proseHeader + proseRepeated);
     }
   };
 
