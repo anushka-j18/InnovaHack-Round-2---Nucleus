@@ -154,3 +154,51 @@ def test_get_metrics_endpoint():
     res_json = response.json()
     assert "total_runs" in res_json
     assert isinstance(res_json["history"], list)
+
+def test_compress_stage_breakdown():
+    """Verify that stage_breakdown is included in the compress endpoint response."""
+    payload = {
+        "text": "Paragraph 1 is here.\n\nParagraph 2 is duplicate.\n\nParagraph 2 is duplicate."
+    }
+    response = client.post("/compress", json=payload)
+    assert response.status_code == 200
+    res_json = response.json()
+    assert "stage_breakdown" in res_json
+    assert len(res_json["stage_breakdown"]) == 3
+    assert res_json["stage_breakdown"][0]["stage"] == "raw"
+    assert res_json["stage_breakdown"][2]["stage"] == "final"
+
+def test_conversation_rolling_endpoint():
+    """Verify session conversation endpoints preserve verbatim turns and compress older history."""
+    session_id = "test-session-conversation-1"
+    
+    turns = [
+        ("user", "Hello first turn"),
+        ("assistant", "I am the assistant turn 2"),
+        ("user", "Turn 3 details"),
+        ("assistant", "Turn 4 response")
+    ]
+    
+    for role, text in turns:
+        payload = {
+            "session_id": session_id,
+            "new_message": text,
+            "role": role,
+            "target_token_budget": 50
+        }
+        response = client.post("/compress/conversation", json=payload)
+        assert response.status_code == 200
+        
+    res_json = response.json()
+    assert res_json["session_id"] == session_id
+    assert "compressed_context" in res_json
+    assert "compressed_tokens" in res_json
+    assert "Turn 4 response" in res_json["compressed_context"]
+
+def test_health_check_offline_mode():
+    """Verify endpoint /health reports offline_mode status."""
+    response = client.get("/health")
+    assert response.status_code == 200
+    res_json = response.json()
+    assert "offline_mode" in res_json
+    assert isinstance(res_json["offline_mode"], bool)

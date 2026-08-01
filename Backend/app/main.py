@@ -2,13 +2,15 @@ import sys
 import time
 import logging
 import traceback
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.concurrency import run_in_threadpool
-from app.models import CompressRequest, CompressResponse
+from app.models import CompressRequest, CompressResponse, ConversationCompressRequest, ConversationCompressResponse
 from app.compressor import compress
 from app.validator import validate
+from app.ingestion import count_tokens
 
 # Setup structured logging
 logging.basicConfig(
@@ -27,10 +29,23 @@ try:
 except ImportError:
     TORCH_AVAILABLE = False
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Auto-warming embedding model on startup
+    logger.info("Warming up embedding model on startup lifespans...")
+    try:
+        from app.compressor import get_model
+        get_model()
+        logger.info("Embedding model pre-warmed and loaded successfully!")
+    except Exception as e:
+        logger.warning(f"Startup model warming warning: {e}")
+    yield
+
 app = FastAPI(
     title="Nucleus API",
     description="Ultra-Low Resource Context Compression Engine API",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan
 )
 
 # Custom in-memory rate-limiter (30 requests per minute per IP)
@@ -184,7 +199,8 @@ async def compress_endpoint(req: CompressRequest):
             latency_speedup_is_estimated=latency_speedup_is_estimated,
             plain_english_summary=result["plain_english_summary"],
             structured_diff=result["structured_diff"],
-            validation_details=validation_details
+            validation_details=validation_details,
+            stage_breakdown=result["stage_breakdown"]
         )
         
         # Save to Cache
@@ -218,6 +234,101 @@ async def compress_endpoint(req: CompressRequest):
             detail="Internal Server Error. Please check backend server logs for details."
         )
 
+# In-memory session store for conversation history
+CONVERSATION_SESSIONS = {}
+
+@app.post("/compress/conversation", response_model=ConversationCompressResponse)
+async def compress_conversation_endpoint(req: ConversationCompressRequest):
+    try:
+        session_id = req.session_id
+        new_msg = req.new_message
+        role = req.role
+        
+        if req.redact_pii:
+            from app.compressor import redact_pii_content
+            new_msg = redact_pii_content(new_msg)
+            
+        if session_id not in CONVERSATION_SESSIONS:
+            CONVERSATION_SESSIONS[session_id] = []
+            
+        CONVERSATION_SESSIONS[session_id].append({
+            "role": role,
+            "text": new_msg,
+            "timestamp": time.time()
+        })
+        
+        history = CONVERSATION_SESSIONS[session_id]
+        verbatim_window = 3
+        
+        if len(history) <= verbatim_window:
+            full_context = "\n".join([f"{t['role'].capitalize()}: {t['text']}" for t in history])
+            raw_tokens = count_tokens(full_context)
+            
+            return ConversationCompressResponse(
+                session_id=session_id,
+                full_history_raw_tokens=raw_tokens,
+                compressed_context=full_context,
+                compressed_tokens=raw_tokens,
+                compression_ratio=0.0,
+                cost_saved_usd=0.0,
+                plain_english_summary="All turns within verbatim window; no compression performed."
+            )
+            
+        older_turns = history[:-verbatim_window]
+        recent_turns = history[-verbatim_window:]
+        
+        older_context = "\n".join([f"{t['role'].capitalize()}: {t['text']}" for t in older_turns])
+        recent_context = "\n".join([f"{t['role'].capitalize()}: {t['text']}" for t in recent_turns])
+        
+        raw_older_tokens = count_tokens(older_context)
+        recent_tokens = count_tokens(recent_context)
+        total_raw_tokens = raw_older_tokens + recent_tokens
+        
+        budget = req.target_token_budget or 2000
+        older_budget = max(50, budget - recent_tokens)
+        
+        comp_res = await run_in_threadpool(
+            compress,
+            older_context,
+            target_token_budget=older_budget,
+            is_conversation=True,
+            redact_pii=False
+        )
+        
+        compressed_older_text = comp_res["compressed_text"]
+        final_context = compressed_older_text + "\n\n" + recent_context
+        final_tokens = count_tokens(final_context)
+        
+        pricing_rate = 3.00
+        if req.target_model:
+            model_key = req.target_model.lower().strip()
+            for k, val in PRICING_TABLE.items():
+                if k in model_key or model_key in k:
+                    pricing_rate = val
+                    break
+        tokens_saved = total_raw_tokens - final_tokens
+        cost_saved_usd = round(max(0.0, tokens_saved * (pricing_rate / 1_000_000)), 6)
+        
+        ratio = round((1 - (final_tokens / total_raw_tokens)) * 100, 1) if total_raw_tokens > 0 else 0.0
+        summary = f"Compressed older history by {comp_res['compression_ratio']}%. Verbatim history protects the last 3 turns."
+        
+        return ConversationCompressResponse(
+            session_id=session_id,
+            full_history_raw_tokens=total_raw_tokens,
+            compressed_context=final_context,
+            compressed_tokens=final_tokens,
+            compression_ratio=ratio,
+            cost_saved_usd=cost_saved_usd,
+            plain_english_summary=summary
+        )
+    except Exception as e:
+        logger.error(f"/compress/conversation failed internally: {e}")
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail="Internal Server Error. Please check backend server logs for details."
+        )
+
 @app.get("/metrics")
 async def get_metrics():
     return {
@@ -230,10 +341,16 @@ async def health():
     cuda_available = torch.cuda.is_available() if TORCH_AVAILABLE else False
     device_name = torch.cuda.get_device_name(0) if cuda_available else "N/A"
     pytorch_version = torch.__version__ if TORCH_AVAILABLE else "Not Installed"
+    
+    from app.compressor import get_model
+    model_instance = get_model()
+    offline_mode = (model_instance.__class__.__name__ == "MockModel")
+    
     return {
         "status": "ok",
         "python_version": sys.version,
         "cuda_available": cuda_available,
         "gpu_device": device_name,
-        "pytorch_version": pytorch_version
+        "pytorch_version": pytorch_version,
+        "offline_mode": offline_mode
     }

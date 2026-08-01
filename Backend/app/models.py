@@ -26,6 +26,11 @@ class QAValidationDetail(BaseModel):
     answer_compressed: str = Field(..., description="The answer generated using compressed context")
     match_score: float = Field(..., description="Semantic match similarity score (0.0 to 100.0)")
 
+class StageBreakdown(BaseModel):
+    stage: str = Field(..., description="The name of the pipeline stage")
+    tokens: int = Field(..., description="Token count at the end of this stage")
+    description: str = Field(..., description="Brief description of the stage processing")
+
 class CompressResponse(BaseModel):
     compressed_text: str = Field(..., description="The compressed version of the input text")
     raw_tokens: int = Field(..., description="Token count of the original context")
@@ -41,3 +46,21 @@ class CompressResponse(BaseModel):
     plain_english_summary: str = Field(..., description="Plain-English explanation of compression savings")
     structured_diff: Optional[List[LineDiff]] = Field(None, description="Line-by-line diff metadata containing keep/drop flags and reasons")
     validation_details: Optional[List[QAValidationDetail]] = Field(None, description="Side-by-side Q&A answers for validation inspectability")
+    stage_breakdown: Optional[List[StageBreakdown]] = Field(None, description="Compression progress tokens breakdown stage-by-stage")
+
+class ConversationCompressRequest(BaseModel):
+    session_id: str = Field(..., description="Unique conversation session identifier")
+    new_message: str = Field(..., description="The newest turn/message to add to the conversation history")
+    role: str = Field("user", description="The role of the message sender (user/assistant)")
+    target_token_budget: Optional[int] = Field(2000, ge=1, description="Target token budget for the entire conversation history context window")
+    redact_pii: Optional[bool] = Field(False, description="Flag indicating if API keys, emails, and credit cards should be redacted")
+    target_model: Optional[str] = Field(None, description="Target model key for pricing calculation (e.g. 'claude-3-5-sonnet', 'gpt-4o', 'gemini-2.5-flash')")
+
+class ConversationCompressResponse(BaseModel):
+    session_id: str = Field(..., description="Unique conversation session identifier")
+    full_history_raw_tokens: int = Field(..., description="Token count of raw running history")
+    compressed_context: str = Field(..., description="The compressed prompt context representing the conversation history")
+    compressed_tokens: int = Field(..., description="Token count of the compressed history")
+    compression_ratio: float = Field(..., description="Percentage reduction in conversation tokens")
+    cost_saved_usd: float = Field(..., description="Estimated cost savings in USD")
+    plain_english_summary: str = Field(..., description="Plain-English summary of conversation compression")

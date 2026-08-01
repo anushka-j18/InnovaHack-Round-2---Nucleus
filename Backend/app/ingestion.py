@@ -203,6 +203,166 @@ def chunk_text(text: str) -> List[Dict]:
                 "line_indices": current_indices
             })
         
+def subdivide_large_chunks(chunks: List[Dict]) -> List[Dict]:
+    """Subdivide any chunk exceeding 200 tokens into smaller sub-chunks to prevent model truncation."""
+    subdivided = []
+    for c in chunks:
+        tokens = count_tokens(c["text"])
+        if tokens <= 200:
+            subdivided.append(c)
+        else:
+            lines = c["text"].splitlines()
+            current_sub = []
+            current_sub_indices = []
+            current_sub_tokens = 0
+            
+            for line_idx, line in enumerate(lines):
+                line_tokens = count_tokens(line)
+                if current_sub_tokens + line_tokens > 200 and current_sub:
+                    subdivided.append({
+                        "index": len(subdivided),
+                        "text": "\n".join(current_sub),
+                        "line_indices": [c["line_indices"][idx] for idx in current_sub_indices]
+                    })
+                    current_sub = []
+                    current_sub_indices = []
+                    current_sub_tokens = 0
+                current_sub.append(line)
+                current_sub_indices.append(line_idx)
+                current_sub_tokens += line_tokens
+                
+            if current_sub:
+                subdivided.append({
+                    "index": len(subdivided),
+                    "text": "\n".join(current_sub),
+                    "line_indices": [c["line_indices"][idx] for idx in current_sub_indices]
+                })
+    # Reset indices
+    for i, c in enumerate(subdivided):
+        c["index"] = i
+    return subdivided
+
+def chunk_text(text: str) -> List[Dict]:
+    """
+    Split input text into semantically coherent chunks and keep track of original line indices.
+    """
+    if not text:
+        return [{"index": 0, "text": "", "line_indices": []}]
+
+    content_type = detect_type(text)
+    lines = text.splitlines()
+    chunks = []
+    
+    if content_type == "log":
+        current_chunk = []
+        current_indices = []
+        current_size = 0
+        max_chunk_size = 800
+        
+        log_start_pattern = re.compile(
+            r'^(\[?\d{4}[-/]\d{2}[-/]\d{2}|'
+            r'\[?\d{2}:\d{2}:\d{2}|'
+            r'\[?(INFO|WARN|WARNING|ERROR|DEBUG|TRACE|FATAL)\]?\b)',
+            re.IGNORECASE
+        )
+        
+        for idx, line in enumerate(lines):
+            if log_start_pattern.match(line.strip()) and current_size > max_chunk_size:
+                chunks.append({
+                    "index": len(chunks),
+                    "text": "\n".join(current_chunk),
+                    "line_indices": current_indices
+                })
+                current_chunk = []
+                current_indices = []
+                current_size = 0
+            current_chunk.append(line)
+            current_indices.append(idx)
+            current_size += len(line) + 1
+            
+        if current_chunk:
+            chunks.append({
+                "index": len(chunks),
+                "text": "\n".join(current_chunk),
+                "line_indices": current_indices
+            })
+            
+    elif content_type == "code":
+        boundary_pattern = re.compile(
+            r'^\s*(def\s+\w+|class\s+\w+|function\s+\w*|export\s+(const|let|var|function|class)|async\s+function|public\s+class|private\s+class|public\s+static|struct\s+\w+|enum\s+\w+)'
+        )
+        
+        current_chunk = []
+        current_indices = []
+        current_size = 0
+        max_chunk_size = 800
+        
+        for idx, line in enumerate(lines):
+            if boundary_pattern.match(line) and current_size > max_chunk_size:
+                chunks.append({
+                    "index": len(chunks),
+                    "text": "\n".join(current_chunk),
+                    "line_indices": current_indices
+                })
+                current_chunk = []
+                current_indices = []
+                current_size = 0
+            current_chunk.append(line)
+            current_indices.append(idx)
+            current_size += len(line) + 1
+            
+        if current_chunk:
+            chunks.append({
+                "index": len(chunks),
+                "text": "\n".join(current_chunk),
+                "line_indices": current_indices
+            })
+            
+    else:  # Prose/text
+        current_chunk = []
+        current_indices = []
+        current_size = 0
+        max_chunk_size = 2000
+        
+        # Group lines into paragraphs first
+        paragraphs_lines = []
+        current_para = []
+        current_para_indices = []
+        for idx, line in enumerate(lines):
+            if not line.strip():
+                if current_para:
+                    paragraphs_lines.append((current_para, current_para_indices))
+                    current_para = []
+                    current_para_indices = []
+                paragraphs_lines.append(([line], [idx]))
+            else:
+                current_para.append(line)
+                current_para_indices.append(idx)
+        if current_para:
+            paragraphs_lines.append((current_para, current_para_indices))
+            
+        for para_lines, para_idxs in paragraphs_lines:
+            para_text = "\n".join(para_lines)
+            if current_size + len(para_text) > max_chunk_size and current_chunk:
+                chunks.append({
+                    "index": len(chunks),
+                    "text": "\n".join(current_chunk),
+                    "line_indices": current_indices
+                })
+                current_chunk = []
+                current_indices = []
+                current_size = 0
+            current_chunk.extend(para_lines)
+            current_indices.extend(para_idxs)
+            current_size += len(para_text) + 2
+            
+        if current_chunk:
+            chunks.append({
+                "index": len(chunks),
+                "text": "\n".join(current_chunk),
+                "line_indices": current_indices
+            })
+        
     if not chunks:
         chunks = [{
             "index": 0,
