@@ -45,6 +45,7 @@ def run_verification():
     ]
     
     pipeline_success = True
+    compression_ratios = []
     
     # 1. Run compression checks across Code, Logs, and Prose
     for data in datasets:
@@ -58,6 +59,7 @@ def run_verification():
             text = f.read()
             
         result = compress(text)
+        compression_ratios.append(result["compression_ratio"])
         tokens_saved = result["raw_tokens"] - result["compressed_tokens"]
         cost_saved_usd = max(0.0, tokens_saved * (3.00 / 1_000_000))
         
@@ -78,6 +80,7 @@ def run_verification():
     qa_path = "sample_data/qa_pairs.json"
     code_path = "sample_data/long_codebase.txt"
     
+    accuracy_met = False
     if os.path.exists(qa_path) and os.path.exists(code_path):
         with open(qa_path, "r", encoding="utf-8") as f:
             qa_pairs = json.load(f)
@@ -93,10 +96,12 @@ def run_verification():
         logger.info(f"Accuracy Retained:   {validation_res['accuracy_retained']}%")
         logger.info(f"Validation Provider: {validation_res['providerUsed']}")
         logger.info(f"Latency Speedup:     {validation_res['latency_speedup_ratio']}x")
+        logger.info(f"Speedup Estimated:   {validation_res['latency_speedup_is_estimated']}")
         logger.info("=" * 60)
         
         if validation_res["accuracy_retained"] is not None and validation_res["accuracy_retained"] >= 95.0:
             logger.info("SUCCESS: Downstream accuracy retention target (95%+) met!")
+            accuracy_met = True
         else:
             logger.warning("WARNING: Accuracy retention below target (95.0%).")
             pipeline_success = False
@@ -104,12 +109,16 @@ def run_verification():
         logger.error("Missing QA data or Code file for reasoning validation check.")
         pipeline_success = False
         
+    # Enforce aggregate pipeline gates
+    all_compression_success = len(compression_ratios) == len(datasets) and all(r >= 70.0 for r in compression_ratios)
+    
     logger.info("=" * 60)
-    if pipeline_success:
+    if all_compression_success and accuracy_met:
         logger.info("OVERALL PIPELINE STATUS: VERIFIED SUCCESSFUL")
+        sys.exit(0)
     else:
-        logger.warning("OVERALL PIPELINE STATUS: WARNING / DEGRADED")
-    logger.info("=" * 60)
+        logger.error("OVERALL PIPELINE STATUS: FAILED (Targets not fully met across Code, Logs, and Prose)")
+        sys.exit(1)
 
 if __name__ == "__main__":
     run_verification()

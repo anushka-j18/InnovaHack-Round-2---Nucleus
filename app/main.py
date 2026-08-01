@@ -1,7 +1,9 @@
 import sys
+import time
 import logging
 import traceback
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.concurrency import run_in_threadpool
 from app.models import CompressRequest, CompressResponse
@@ -27,9 +29,36 @@ except ImportError:
 
 app = FastAPI(
     title="Nucleus API",
-    description="Ultra-Low Resource LLM Context Context Compression Engine API",
+    description="Ultra-Low Resource Context Compression Engine API",
     version="1.0.0"
 )
+
+# Custom in-memory rate-limiter (30 requests per minute per IP)
+RATE_LIMIT_WINDOW = 60  # seconds
+RATE_LIMIT_MAX_REQUESTS = 30
+request_history = {}
+
+@app.middleware("http")
+async def rate_limit_middleware(request: Request, call_next):
+    if request.url.path.startswith("/compress"):
+        client_ip = request.client.host if request.client else "unknown"
+        now = time.time()
+        
+        # Filter request timestamps older than 60 seconds
+        history = request_history.get(client_ip, [])
+        history = [t for t in history if now - t < RATE_LIMIT_WINDOW]
+        request_history[client_ip] = history
+        
+        if len(history) >= RATE_LIMIT_MAX_REQUESTS:
+            logger.warning(f"Rate limit exceeded for IP: {client_ip}")
+            return JSONResponse(
+                status_code=429,
+                content={"detail": "Too many requests. Rate limit is 30 requests per minute."}
+            )
+            
+        request_history[client_ip].append(now)
+        
+    return await call_next(request)
 
 # Enable CORS for frontend integration (allowing wide wildcard origins securely)
 app.add_middleware(
@@ -61,6 +90,7 @@ async def compress_endpoint(req: CompressRequest):
         validation_provider = None
         provider_used = None
         latency_speedup = None
+        latency_speedup_is_estimated = None
         
         if req.qa_pairs:
             qa_list = [pair.model_dump() for pair in req.qa_pairs]
@@ -70,6 +100,7 @@ async def compress_endpoint(req: CompressRequest):
             validation_provider = validation_res["providerUsed"]
             provider_used = validation_res["providerUsed"]
             latency_speedup = validation_res["latency_speedup_ratio"]
+            latency_speedup_is_estimated = validation_res["latency_speedup_is_estimated"]
             
         # Cost saving calculation (Reference target model: Claude 3.5 Sonnet at $3.00/1M input tokens)
         tokens_saved = result["raw_tokens"] - result["compressed_tokens"]
@@ -90,7 +121,8 @@ async def compress_endpoint(req: CompressRequest):
             validation_provider=validation_provider,
             providerUsed=provider_used,
             cost_saved_usd=cost_saved_usd,
-            latency_speedup_ratio=latency_speedup
+            latency_speedup_ratio=latency_speedup,
+            latency_speedup_is_estimated=latency_speedup_is_estimated
         )
     except Exception as e:
         logger.error(f"/compress failed internally: {e}")

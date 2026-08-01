@@ -72,7 +72,7 @@ def validate(raw_text: str, compressed_text: str, qa_pairs: list[dict]) -> dict:
         logger.info(f"-> Match Score: {similarity:.1f}%")
         
     if not scores:
-        return {"accuracy_retained": None, "providerUsed": None, "latency_speedup_ratio": None}
+        return {"accuracy_retained": None, "providerUsed": None, "latency_speedup_ratio": None, "latency_speedup_is_estimated": None}
         
     avg_accuracy = sum(scores) / len(scores)
     # Most common provider used during the run
@@ -80,9 +80,16 @@ def validate(raw_text: str, compressed_text: str, qa_pairs: list[dict]) -> dict:
     
     # Speedup ratio calculation (handling division by zero)
     speedup_ratio = 1.0
+    is_estimated = False
+    
+    # If the provider is mock (simulated delay), flag it as estimated
+    if provider_used == "mock":
+        is_estimated = True
+        
     if total_compressed_time > 0:
         speedup_ratio = round(total_raw_time / total_compressed_time, 2)
     else:
+        is_estimated = True
         # Fallback to estimated theoretical speedup if mock returns instantly (safety check)
         raw_tokens = len(raw_text) // 4
         comp_tokens = len(compressed_text) // 4
@@ -90,10 +97,11 @@ def validate(raw_text: str, compressed_text: str, qa_pairs: list[dict]) -> dict:
             speedup_ratio = round(raw_tokens / comp_tokens, 2)
             
     logger.info(f"Latency raw total: {total_raw_time:.2f}s | Latency compressed total: {total_compressed_time:.2f}s")
-    logger.info(f"Calculated Latency Speedup: {speedup_ratio}x")
+    logger.info(f"Calculated Latency Speedup: {speedup_ratio}x (Estimated: {is_estimated})")
     
     return {
         "accuracy_retained": round(avg_accuracy, 1),
         "providerUsed": provider_used,
-        "latency_speedup_ratio": speedup_ratio
+        "latency_speedup_ratio": speedup_ratio,
+        "latency_speedup_is_estimated": is_estimated
     }

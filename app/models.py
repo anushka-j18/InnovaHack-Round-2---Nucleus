@@ -6,7 +6,7 @@ class QAPair(BaseModel):
     expected_answer: Optional[str] = Field(None, description="Optional ground truth answer to compare against")
 
 class CompressRequest(BaseModel):
-    text: str = Field(..., description="The raw context text to be compressed")
+    text: str = Field(..., max_length=50000, description="The raw context text to be compressed (max 50,000 characters)")
     qa_pairs: Optional[List[QAPair]] = Field(None, description="Optional list of QA pairs for accuracy retention validation")
 
 class CompressResponse(BaseModel):
@@ -20,3 +20,4 @@ class CompressResponse(BaseModel):
     providerUsed: Optional[str] = Field(None, description="The provider used for validation QA (matching frontend/DB naming)")
     cost_saved_usd: float = Field(..., description="Estimated cost savings in USD compared to raw context processing")
     latency_speedup_ratio: Optional[float] = Field(None, description="Latency speedup ratio factor (e.g. 2.4x)")
+    latency_speedup_is_estimated: Optional[bool] = Field(None, description="Flag indicating if the latency speedup ratio was simulated/estimated")
