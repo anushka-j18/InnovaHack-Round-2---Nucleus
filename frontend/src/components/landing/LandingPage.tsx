@@ -388,7 +388,7 @@ export default function LandingPage() {
       </section>
 
       {/* BEYOND LIMITS: INTERACTIVE BENTO GRID (WOW FACTOR) */}
-      <section className="relative z-10 w-full py-40 px-6 sm:px-12 max-w-[1400px] mx-auto perspective-[2000px]">
+      <section className="relative z-10 w-full pt-40 pb-20 px-6 sm:px-12 max-w-[1400px] mx-auto perspective-[2000px]">
         <div className="text-center mb-32 bento-reveal">
           <h2 className="text-5xl sm:text-6xl md:text-7xl font-bold tracking-tight mb-8 drop-shadow-xl">
             Beyond Limits.
@@ -493,7 +493,7 @@ export default function LandingPage() {
       </section>
 
       {/* FOOTER */}
-      <footer ref={footerRef} className="relative z-10 w-full min-h-[80vh] flex flex-col items-center justify-center mt-20 border-t border-white/5 bg-black overflow-hidden">
+      <footer ref={footerRef} className="relative z-10 w-full py-32 flex flex-col items-center justify-center border-t border-white/5 bg-black overflow-hidden">
         
         <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[100vw] h-[60vh] bg-[radial-gradient(ellipse_at_bottom,rgba(255,255,255,0.1)_0%,transparent_70%)] pointer-events-none" />
 

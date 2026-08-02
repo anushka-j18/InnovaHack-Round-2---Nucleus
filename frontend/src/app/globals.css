@@ -67,20 +67,15 @@ h1, h2, h3, h4, h5, h6 {
 .animate-glow {
   animation: pulseGlow 3s infinite ease-in-out;
 }
-/* Custom Scrollbar */
+/* Custom Scrollbar (Hidden for cleaner UI) */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  display: none;
+  width: 0px;
+  height: 0px;
 }
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-::-webkit-scrollbar-thumb {
-  background: #323131;
-  border-radius: 3px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: #555;
+* {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE and Edge */
 }
 @layer base {
   .theme {
