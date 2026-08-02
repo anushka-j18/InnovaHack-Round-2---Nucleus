@@ -30,3 +30,6 @@ EMBEDDING_MAX_TOKENS = 256
 
 # Maximum characters accepted per /compress request.
 MAX_INPUT_CHARS = 200_000
+
+# Optional API key for header checking (X-API-Key)
+NUCLEUS_API_KEY = os.getenv("NUCLEUS_API_KEY", "")

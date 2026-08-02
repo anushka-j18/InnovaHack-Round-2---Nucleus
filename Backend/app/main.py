@@ -2,15 +2,30 @@ import sys
 import time
 import logging
 import traceback
+import asyncio
+import uuid
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.concurrency import run_in_threadpool
+
 from app.models import CompressRequest, CompressResponse, ConversationCompressRequest, ConversationCompressResponse
 from app.compressor import compress
 from app.validator import validate
 from app.ingestion import count_tokens
+from app.config import NUCLEUS_API_KEY
+from app.database import (
+    init_db,
+    get_cached_response,
+    set_cached_response,
+    get_metrics_history,
+    add_metrics_run,
+    get_conversation_session,
+    save_conversation_session,
+    get_run_trace,
+    save_run_trace
+)
 
 # Setup structured logging
 logging.basicConfig(
@@ -28,6 +43,9 @@ try:
     TORCH_AVAILABLE = True
 except ImportError:
     TORCH_AVAILABLE = False
+
+# Auto-initialize database on application import
+init_db()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -53,14 +71,15 @@ RATE_LIMIT_WINDOW = 60  # seconds
 RATE_LIMIT_MAX_REQUESTS = 30
 request_history = {}
 
-# In-memory dictionary cache with max size 100
-COMPRESSION_CACHE = {}
-MAX_CACHE_SIZE = 100
-RUN_TRACES = {}
+# Locks for concurrency safety
+db_lock = asyncio.Lock()
+limiter_lock = asyncio.Lock()
 
-# In-memory metrics history
-METRICS_HISTORY = []
-MAX_METRICS_HISTORY = 100
+def verify_api_key(request: Request):
+    if NUCLEUS_API_KEY:
+        header_key = request.headers.get("X-API-Key")
+        if not header_key or header_key != NUCLEUS_API_KEY:
+            raise HTTPException(status_code=401, detail="Unauthorized. Invalid or missing X-API-Key.")
 
 # Pricing table per 1M input tokens in USD
 PRICING_TABLE = {
@@ -90,23 +109,28 @@ def get_cache_key(req: CompressRequest) -> str:
 
 @app.middleware("http")
 async def rate_limit_middleware(request: Request, call_next):
+    # Setup unique Request ID for log correlation
+    request_id = request.headers.get("X-Request-ID", uuid.uuid4().hex[:8])
+    request.state.request_id = request_id
+    
     if request.url.path.startswith("/compress"):
         client_ip = request.client.host if request.client else "unknown"
         now = time.time()
         
-        # Filter request timestamps older than 60 seconds
-        history = request_history.get(client_ip, [])
-        history = [t for t in history if now - t < RATE_LIMIT_WINDOW]
-        request_history[client_ip] = history
-        
-        if len(history) >= RATE_LIMIT_MAX_REQUESTS:
-            logger.warning(f"Rate limit exceeded for IP: {client_ip}")
-            return JSONResponse(
-                status_code=429,
-                content={"detail": "Too many requests. Rate limit is 30 requests per minute."}
-            )
+        async with limiter_lock:
+            # Filter request timestamps older than 60 seconds
+            history = request_history.get(client_ip, [])
+            history = [t for t in history if now - t < RATE_LIMIT_WINDOW]
+            request_history[client_ip] = history
             
-        request_history[client_ip].append(now)
+            if len(history) >= RATE_LIMIT_MAX_REQUESTS:
+                logger.warning(f"[{request_id}] Rate limit exceeded for IP: {client_ip}")
+                return JSONResponse(
+                    status_code=429,
+                    content={"detail": "Too many requests. Rate limit is 30 requests per minute."}
+                )
+                
+            request_history[client_ip].append(now)
         
     return await call_next(request)
 
@@ -120,15 +144,18 @@ app.add_middleware(
 )
 
 @app.post("/compress", response_model=CompressResponse)
-async def compress_endpoint(req: CompressRequest):
+async def compress_endpoint(req: CompressRequest, request: Request):
     try:
-        logger.info("Received request on /compress endpoint")
+        verify_api_key(request)
+        request_id = request.state.request_id
+        logger.info(f"[{request_id}] Received request on /compress endpoint")
         
-        # Check Cache
+        # Check SQLite Cache
         cache_key = get_cache_key(req)
-        if cache_key in COMPRESSION_CACHE:
-            logger.info("Serving response from cache")
-            return COMPRESSION_CACHE[cache_key]
+        cached = get_cached_response(cache_key)
+        if cached:
+            logger.info(f"[{request_id}] Serving response from SQLite cache")
+            return CompressResponse(**cached)
             
         # Run stage A, B, and C compression in threadpool (non-blocking)
         result = await run_in_threadpool(
@@ -158,6 +185,7 @@ async def compress_endpoint(req: CompressRequest):
         validation_details = []
         
         if req.qa_pairs:
+            logger.info(f"[{request_id}] Running semantic QA validation")
             qa_list = [pair.model_dump() for pair in req.qa_pairs]
             # Run validate in threadpool (non-blocking)
             validation_res = await run_in_threadpool(validate, req.text, result["compressed_text"], qa_list)
@@ -182,15 +210,12 @@ async def compress_endpoint(req: CompressRequest):
         cost_saved_usd = round(max(0.0, tokens_saved * (pricing_rate / 1_000_000)), 6)
         
         logger.info(
-            f"Compression success: raw={result['raw_tokens']} -> comp={result['compressed_tokens']} "
+            f"[{request_id}] Compression success: raw={result['raw_tokens']} -> comp={result['compressed_tokens']} "
             f"({result['compression_ratio']}% reduction) | cost_saved=${cost_saved_usd:.6f}"
         )
         
         # Generate unique run ID
         run_id = f"run_{int(time.time() * 1000)}"
-        
-        # Save full untruncated trace log
-        RUN_TRACES[run_id] = result.get("compression_trace", [])
         
         # Clone trace for main response and truncate long lists
         response_trace = []
@@ -226,13 +251,6 @@ async def compress_endpoint(req: CompressRequest):
             run_id=run_id
         )
         
-        # Save to Cache
-        if len(COMPRESSION_CACHE) >= MAX_CACHE_SIZE:
-            first_key = next(iter(COMPRESSION_CACHE))
-            COMPRESSION_CACHE.pop(first_key, None)
-        COMPRESSION_CACHE[cache_key] = response
-        
-        # Save to Metrics History
         run_metrics = {
             "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
             "run_id": run_id,
@@ -253,11 +271,16 @@ async def compress_endpoint(req: CompressRequest):
                 for s in result.get("compression_trace", [])
             ]
         }
-        METRICS_HISTORY.append(run_metrics)
-        if len(METRICS_HISTORY) > MAX_METRICS_HISTORY:
-            METRICS_HISTORY.pop(0)
+        
+        # Save to SQLite Cache, Traces, and Metrics (Mutex Protected)
+        async with db_lock:
+            set_cached_response(cache_key, response.model_dump())
+            add_metrics_run(run_metrics)
+            save_run_trace(run_id, result.get("compression_trace", []))
             
         return response
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"/compress failed internally: {e}")
         traceback.print_exc()
@@ -266,12 +289,15 @@ async def compress_endpoint(req: CompressRequest):
             detail="Internal Server Error. Please check backend server logs for details."
         )
 
-# In-memory session store for conversation history
-CONVERSATION_SESSIONS = {}
+# In-memory session store for conversation history is replaced by SQLite database persistence.
 
 @app.post("/compress/conversation", response_model=ConversationCompressResponse)
-async def compress_conversation_endpoint(req: ConversationCompressRequest):
+async def compress_conversation_endpoint(req: ConversationCompressRequest, request: Request):
     try:
+        verify_api_key(request)
+        request_id = request.state.request_id
+        logger.info(f"[{request_id}] Received conversation compression request for session {req.session_id}")
+        
         session_id = req.session_id
         new_msg = req.new_message
         role = req.role
@@ -280,22 +306,34 @@ async def compress_conversation_endpoint(req: ConversationCompressRequest):
             from app.compressor import redact_pii_content
             new_msg, _ = redact_pii_content(new_msg)
             
-        if session_id not in CONVERSATION_SESSIONS:
-            CONVERSATION_SESSIONS[session_id] = []
-            
-        CONVERSATION_SESSIONS[session_id].append({
+        # Retrieve conversation session (Mutex Protected)
+        async with db_lock:
+            session = get_conversation_session(session_id)
+            if not session:
+                session = {
+                    "history": [],
+                    "compressed_older_context": "",
+                    "compressed_older_count": 0
+                }
+                
+        # Append new message
+        session["history"].append({
             "role": role,
             "text": new_msg,
             "timestamp": time.time()
         })
         
-        history = CONVERSATION_SESSIONS[session_id]
+        history = session["history"]
         verbatim_window = 3
         
         if len(history) <= verbatim_window:
             full_context = "\n".join([f"{t['role'].capitalize()}: {t['text']}" for t in history])
             raw_tokens = count_tokens(full_context)
             
+            # Save session to DB (Mutex Protected)
+            async with db_lock:
+                save_conversation_session(session_id, session)
+                
             return ConversationCompressResponse(
                 session_id=session_id,
                 full_history_raw_tokens=raw_tokens,
@@ -308,28 +346,47 @@ async def compress_conversation_endpoint(req: ConversationCompressRequest):
                 plain_english_summary="All turns within verbatim window; no compression performed."
             )
             
-        older_turns = history[:-verbatim_window]
+        # Cumulative Raw Context of entire history
+        raw_full_context = "\n".join([f"{t['role'].capitalize()}: {t['text']}" for t in history])
+        total_raw_tokens = count_tokens(raw_full_context)
+        
+        # Segment older and recent turns
         recent_turns = history[-verbatim_window:]
-        
-        older_context = "\n".join([f"{t['role'].capitalize()}: {t['text']}" for t in older_turns])
         recent_context = "\n".join([f"{t['role'].capitalize()}: {t['text']}" for t in recent_turns])
-        
-        raw_older_tokens = count_tokens(older_context)
         recent_tokens = count_tokens(recent_context)
-        total_raw_tokens = raw_older_tokens + recent_tokens
         
+        older_turns_count = len(history) - verbatim_window
         budget = req.target_token_budget or 2000
         older_budget = max(50, budget - recent_tokens)
         
-        comp_res = await run_in_threadpool(
-            compress,
-            older_context,
-            target_token_budget=older_budget,
-            is_conversation=True,
-            redact_pii=False
-        )
+        comp_res_ratio = 0.0
         
-        compressed_older_text = comp_res["compressed_text"]
+        # O(N) Incremental Compression Check
+        if session["compressed_older_count"] < older_turns_count:
+            # Gather newly aged-out turns (usually just 1 turn)
+            new_aged_out_turns = history[session["compressed_older_count"]:older_turns_count]
+            new_aged_out_text = "\n".join([f"{t['role'].capitalize()}: {t['text']}" for t in new_aged_out_turns])
+            
+            old_context = session["compressed_older_context"]
+            if old_context:
+                combine_context = old_context + "\n" + new_aged_out_text
+            else:
+                combine_context = new_aged_out_text
+                
+            logger.info(f"[{request_id}] Performing incremental O(N) compression on older history")
+            comp_res = await run_in_threadpool(
+                compress,
+                combine_context,
+                target_token_budget=older_budget,
+                is_conversation=True,
+                redact_pii=False
+            )
+            
+            session["compressed_older_context"] = comp_res["compressed_text"]
+            session["compressed_older_count"] = older_turns_count
+            comp_res_ratio = comp_res["compression_ratio"]
+            
+        compressed_older_text = session["compressed_older_context"]
         final_context = compressed_older_text + "\n\n" + recent_context
         final_tokens = count_tokens(final_context)
         
@@ -344,19 +401,25 @@ async def compress_conversation_endpoint(req: ConversationCompressRequest):
         cost_saved_usd = round(max(0.0, tokens_saved * (pricing_rate / 1_000_000)), 6)
         
         ratio = round((1 - (final_tokens / total_raw_tokens)) * 100, 1) if total_raw_tokens > 0 else 0.0
-        summary = f"Compressed older history by {comp_res['compression_ratio']}%. Verbatim history protects the last 3 turns."
+        summary = f"Compressed older history by {comp_res_ratio}%. Verbatim history protects the last 3 turns."
         
+        # Save session to DB (Mutex Protected)
+        async with db_lock:
+            save_conversation_session(session_id, session)
+            
         return ConversationCompressResponse(
             session_id=session_id,
             full_history_raw_tokens=total_raw_tokens,
             compressed_context=final_context,
             compressed_tokens=final_tokens,
             compression_ratio=ratio,
-            compression_ratio_turn=comp_res["compression_ratio"],
+            compression_ratio_turn=comp_res_ratio,
             compression_ratio_session=ratio,
             cost_saved_usd=cost_saved_usd,
             plain_english_summary=summary
         )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"/compress/conversation failed internally: {e}")
         traceback.print_exc()
@@ -366,19 +429,23 @@ async def compress_conversation_endpoint(req: ConversationCompressRequest):
         )
 
 @app.get("/compress/{run_id}/trace")
-async def get_run_trace(run_id: str):
-    if run_id not in RUN_TRACES:
+async def get_run_trace_endpoint(run_id: str, request: Request):
+    verify_api_key(request)
+    trace = get_run_trace(run_id)
+    if trace is None:
         raise HTTPException(status_code=404, detail="Trace not found for the specified run ID.")
     return {
         "run_id": run_id,
-        "compression_trace": RUN_TRACES[run_id]
+        "compression_trace": trace
     }
 
 @app.get("/metrics")
-async def get_metrics():
+async def get_metrics(request: Request):
+    verify_api_key(request)
+    history = get_metrics_history()
     return {
-        "total_runs": len(METRICS_HISTORY),
-        "history": METRICS_HISTORY
+        "total_runs": len(history),
+        "history": history
     }
 
 @app.get("/health")

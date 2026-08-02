@@ -173,31 +173,42 @@ def test_conversation_rolling_endpoint():
     session_id = "test-session-conversation-1"
     
     turns = [
-        ("user", "Hello first turn"),
-        ("assistant", "I am the assistant turn 2"),
-        ("user", "Turn 3 details"),
-        ("assistant", "Turn 4 response")
+        ("user", "Hello first turn. Let's make it a longer turn to ensure high compression ratios."),
+        ("assistant", "I am the assistant turn 2. We should add plenty of filler text here."),
+        ("user", "Turn 3 details. Adding another turn to push the first turn out of the verbatim window."),
+        ("assistant", "Turn 4 response. Now the first turn is sliding out of the verbatim window and needs O(N) compression."),
+        ("user", "Turn 5 query. The older history is cached and appended to incrementally."),
+        ("assistant", "Turn 6 closing response. Assert that compression ratios are properly computed.")
     ]
     
-    for role, text in turns:
+    for idx, (role, text) in enumerate(turns):
         payload = {
             "session_id": session_id,
             "new_message": text,
             "role": role,
-            "target_token_budget": 50
+            "target_token_budget": 60
         }
         response = client.post("/compress/conversation", json=payload)
         assert response.status_code == 200
+        res_json = response.json()
         
+        # Verify first 3 turns (no compression)
+        if idx < 3:
+            assert res_json["compression_ratio"] == 0.0
+            assert res_json["compression_ratio_turn"] == 0.0
+            assert res_json["compression_ratio_session"] == 0.0
+        else:
+            # Check ratio fields
+            assert "compression_ratio_turn" in res_json
+            assert "compression_ratio_session" in res_json
+            assert isinstance(res_json["compression_ratio_turn"], float)
+            assert isinstance(res_json["compression_ratio_session"], float)
+            
     res_json = response.json()
     assert res_json["session_id"] == session_id
     assert "compressed_context" in res_json
     assert "compressed_tokens" in res_json
-    assert "Turn 4 response" in res_json["compressed_context"]
-    assert "compression_ratio_turn" in res_json
-    assert "compression_ratio_session" in res_json
-    assert isinstance(res_json["compression_ratio_turn"], float)
-    assert isinstance(res_json["compression_ratio_session"], float)
+    assert "Turn 6 closing response" in res_json["compressed_context"]
 
 def test_health_check_offline_mode():
     """Verify endpoint /health reports offline_mode status."""
@@ -239,3 +250,22 @@ def test_compress_compression_trace():
     trace_json = trace_res.json()
     assert trace_json["run_id"] == run_id
     assert isinstance(trace_json["compression_trace"], list)
+
+def test_api_key_auth_verification(monkeypatch):
+    """Verify that if NUCLEUS_API_KEY is configured, X-API-Key header is strictly checked."""
+    # Set config API key
+    monkeypatch.setattr("app.main.NUCLEUS_API_KEY", "secret-test-key")
+    
+    payload = {"text": "Simple context content"}
+    
+    # 1. No header -> 401
+    response = client.post("/compress", json=payload)
+    assert response.status_code == 401
+    
+    # 2. Incorrect header -> 401
+    response = client.post("/compress", json=payload, headers={"X-API-Key": "wrong-key"})
+    assert response.status_code == 401
+    
+    # 3. Correct header -> 200
+    response = client.post("/compress", json=payload, headers={"X-API-Key": "secret-test-key"})
+    assert response.status_code == 200
