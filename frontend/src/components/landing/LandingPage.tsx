@@ -60,7 +60,7 @@ export default function LandingPage() {
 
       // 4. Reveal Animations for Bento Grid
       const bentoItems = gsap.utils.toArray('.bento-reveal');
-      bentoItems.forEach((item: any) => {
+      bentoItems.forEach((item: HTMLElement | Element | string | object | null) => {
         gsap.fromTo(item,
           { opacity: 0, y: 50, scale: 0.95 },
           {
@@ -78,7 +78,7 @@ export default function LandingPage() {
       // 5. Interactive 3D Tilt for Bento Cards
       const bentoCards = document.querySelectorAll('.bento-card-interactive');
       bentoCards.forEach(card => {
-        card.addEventListener('mousemove', (e: any) => {
+        card.addEventListener('mousemove', (e: MouseEvent) => {
           const rect = card.getBoundingClientRect();
           const x = e.clientX - rect.left;
           const y = e.clientY - rect.top;
@@ -480,7 +480,7 @@ export default function LandingPage() {
                  <div className="w-3.5 h-3.5 rounded-full bg-white/20" />
                </div>
                <div className="p-8 font-mono text-[13px] leading-[2.2] tracking-wide">
-                 <div className="text-white/40">1 | <span className="text-[#a78bfa]">import</span> {'{'} Nucleus {'}'} <span className="text-[#a78bfa]">from</span> <span className="text-[#a3e635]">'nucleus-node'</span>;</div>
+                 <div className="text-white/40">1 | <span className="text-[#a78bfa]">import</span> {'{'} Nucleus {'}'} <span className="text-[#a78bfa]">from</span> <span className="text-[#a3e635]">&apos;nucleus-node&apos;</span>;</div>
                  <div className="text-white/40">2 | </div>
                  <div className="text-white/40">3 | <span className="text-[#60a5fa]">const</span> client = <span className="text-[#a78bfa]">new</span> Nucleus({'{'}</div>
                  <div className="text-white/40">4 |   apiKey: process.env.<span className="text-[#60a5fa]">NUCLEUS_API_KEY</span></div>

@@ -91,7 +91,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
                   href="/login?mode=signup"
                   className="text-white/40 hover:text-white text-xs font-mono text-center mt-2 transition-colors uppercase tracking-widest"
                 >
-                  Don't have an account? Sign Up
+                  Don&apos;t have an account? Sign Up
                 </Link>
               </>
             )}
