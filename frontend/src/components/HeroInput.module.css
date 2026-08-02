@@ -54,16 +54,21 @@
 }
 
 .inputGlassContainer {
-  padding: 16px;
+  padding: 8px;
   display: flex;
-  flex-direction: column;
-  transition: all 0.3s ease;
+  flex-direction: row;
+  align-items: flex-end;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
+  border-radius: 40px;
+  background: #111111;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
 }
 
 .inputGlassContainer:focus-within {
-  border-color: rgba(255, 255, 255, 0.2);
-  box-shadow: 0 0 30px rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.25);
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.6);
 }
 
 .inputGlassContainer.loading {
@@ -72,21 +77,25 @@
 }
 
 .textarea {
-  width: 100%;
-  min-height: 120px;
+  flex: 1;
+  min-height: 24px;
+  max-height: 140px;
+  overflow-y: auto;
   background: transparent;
   border: none;
-  color: var(--text-primary);
+  color: #ffffff;
   font-family: inherit;
   font-size: 16px;
-  resize: vertical;
+  resize: none;
   outline: none;
-  margin-bottom: 16px;
+  margin: 0 8px;
+  padding: 10px 16px;
   line-height: 1.5;
 }
 
 .textarea::placeholder {
-  color: #666;
+  color: #888888;
+  font-weight: 400;
 }
 
 .qaSection {
@@ -137,75 +146,50 @@
   border-color: rgba(255, 255, 255, 0.3);
 }
 
-.inputFooter {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding-top: 12px;
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-.leftActions {
-  display: flex;
-  gap: 12px;
-}
-
-.actionBtn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  color: var(--text-secondary);
-  padding: 6px 12px;
-  border-radius: 20px;
-  font-size: 13px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.actionBtn:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--text-primary);
-}
-
-.actionBtn.activeAction {
-  background: rgba(255, 255, 255, 0.1);
-  color: var(--text-primary);
-  border-color: rgba(255, 255, 255, 0.2);
-}
+/* Removed unused iconBtn styles */
 
 .submitBtn {
-  width: 40px;
-  height: 40px;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  color: var(--text-primary);
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: #222222;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #ffffff;
   display: flex;
   justify-content: center;
   align-items: center;
   cursor: pointer;
-  transition: all 0.2s;
+  margin-bottom: 4px;
+  margin-right: 4px;
+  transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.submitBtn:not(:disabled) {
+  background: #ffffff;
+  color: #000000;
+  border-color: #ffffff;
 }
 
 .submitBtn:not(:disabled):hover {
-  background: rgba(255, 255, 255, 0.2);
   transform: scale(1.05);
 }
 
+.submitBtn:not(:disabled):active {
+  transform: scale(0.95);
+}
+
 .submitBtn:disabled {
-  opacity: 0.5;
+  opacity: 1;
   cursor: not-allowed;
 }
 
 .spinner {
   width: 18px;
   height: 18px;
-  border: 2px solid rgba(255,255,255,0.3);
+  border: 2px solid rgba(255,255,255,0.2);
   border-radius: 50%;
-  border-top-color: #fff;
-  animation: spin 1s ease-in-out infinite;
+  border-top-color: #ffffff;
+  animation: spin 1s linear infinite;
 }
 
 @keyframes spin {

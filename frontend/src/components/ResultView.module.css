@@ -234,26 +234,37 @@
 }
 
 .chatInputInner {
-  background: rgba(20, 20, 20, 0.6);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 16px;
-  padding: 16px;
-  backdrop-filter: blur(24px);
+  padding: 8px;
   display: flex;
-  flex-direction: column;
-  gap: 12px;
+  flex-direction: row;
+  align-items: flex-end;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  border-radius: 40px;
+  background: #111111;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+}
+
+.chatInputInner.loading {
+  border-color: rgba(255, 255, 255, 0.4);
 }
 
 .chatInput {
+  flex: 1;
+  min-height: 24px;
+  max-height: 140px;
+  overflow-y: auto;
   background: transparent;
   border: none;
-  color: var(--text-primary);
-  font-size: 16px;
+  color: #ffffff;
   font-family: inherit;
-  outline: none;
+  font-size: 15px;
   resize: none;
-  max-height: 200px;
-  overflow-y: auto;
+  outline: none;
+  margin: 0 12px;
+  padding: 10px 0;
+  line-height: 1.5;
 }
 
 .chatInput::-webkit-scrollbar {
@@ -508,45 +519,29 @@
   to { transform: rotate(360deg); }
 }
 
-.inputFooter {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding-top: 12px;
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-.leftActions {
-  display: flex;
-  gap: 12px;
-}
-
-.activeAction {
-  background: rgba(255, 255, 255, 0.1) !important;
-  color: var(--text-primary) !important;
-  border-color: rgba(255, 255, 255, 0.2) !important;
-}
-
 .submitBtn {
-  width: 40px;
-  height: 40px;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  color: var(--text-primary);
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: none;
   display: flex;
   justify-content: center;
   align-items: center;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  flex-shrink: 0;
+  background: #ffffff;
+  color: #000000;
 }
 
-.submitBtn:not(:disabled):hover {
-  background: rgba(255, 255, 255, 0.2);
+.submitBtn:hover:not(:disabled) {
   transform: scale(1.05);
+  background: #f0f0f0;
 }
 
 .submitBtn:disabled {
-  opacity: 0.5;
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.5);
   cursor: not-allowed;
+  transform: scale(0.95);
 }

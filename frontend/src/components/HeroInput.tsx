@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Send, Settings, CheckCircle2, FileText, Code } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { Send, Settings, CheckCircle2, FileText, Code, ArrowUp, Loader2 } from 'lucide-react';
 import styles from './HeroInput.module.css';
 
 interface HeroInputProps {
@@ -9,11 +9,27 @@ interface HeroInputProps {
 
 export default function HeroInput({ onSubmit, isLoading }: HeroInputProps) {
   const [text, setText] = useState('');
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
+    }
+  }, [text]);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!text.trim()) return;
     
     onSubmit(text, []);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSubmit(e as unknown as React.FormEvent);
+    }
   };
 
   return (
@@ -25,36 +41,27 @@ export default function HeroInput({ onSubmit, isLoading }: HeroInputProps) {
       <h1 className={styles.heroTitle}>How can I compress your context today?</h1>
       
       <form onSubmit={handleSubmit} className={styles.inputWrapper}>
-        <div className={`glass-panel ${styles.inputGlassContainer} ${isLoading ? styles.loading : ''}`}>
+        <div className={`${styles.inputGlassContainer} ${isLoading ? styles.loading : ''}`}>
+          
           <textarea
+            ref={textareaRef}
             className={styles.textarea}
             placeholder="Paste your long codebase, logs, or text here (up to 50k characters)..."
             value={text}
             onChange={(e) => setText(e.target.value)}
+            onKeyDown={handleKeyDown}
             disabled={isLoading}
             maxLength={50000}
+            rows={1}
           />
           
-          <div className={styles.inputFooter}>
-            <div className={styles.leftActions}>
-              <button 
-                type="button" 
-                className={styles.actionBtn}
-                onClick={() => alert('Advanced compression options coming soon!')}
-              >
-                <Settings size={16} />
-                <span>Options</span>
-              </button>
-            </div>
-            
-            <button 
-              type="submit" 
-              className={styles.submitBtn} 
-              disabled={isLoading || !text.trim()}
-            >
-              <Send size={18} />
-            </button>
-          </div>
+          <button 
+            type="submit" 
+            className={styles.submitBtn} 
+            disabled={isLoading || !text.trim()}
+          >
+            {isLoading ? <Loader2 size={18} className={styles.spinner} /> : <ArrowUp size={18} />}
+          </button>
         </div>
         
         <div className={styles.suggestionPills}>

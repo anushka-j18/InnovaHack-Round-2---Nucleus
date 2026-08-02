@@ -44,8 +44,8 @@ def test_compress_endpoint_without_qa():
     """Verify endpoint /compress handles payload without qa_pairs and skips validation."""
     payload = {
         "text": (
-            "def dummy_api_check():\n"
-            "    return True\n"
+            "def dummy_api_check_no_qa():\n"
+            "    return False\n"
         )
     }
     response = client.post("/compress", json=payload)

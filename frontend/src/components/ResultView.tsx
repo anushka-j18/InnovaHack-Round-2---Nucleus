@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Target, Copy, Edit2, Code, Settings as SettingsIcon, Send, Check, CheckCircle2, Zap, DollarSign } from 'lucide-react';
+import { Target, Copy, Edit2, Code, Settings as SettingsIcon, Send, Check, CheckCircle2, Zap, DollarSign, ArrowUp, Loader2 } from 'lucide-react';
 import styles from './ResultView.module.css';
 
 import AIPipeline, { CompressionGraph } from './AIPipeline';
@@ -32,12 +32,19 @@ type TabType = 'Answer' | 'Metrics' | 'Difference';
 function ChatTurnItem({ turn }: { turn: ChatTurnType }) {
   const [activeTab, setActiveTab] = useState<TabType>('Answer');
   const [isCopied, setIsCopied] = useState(false);
+  const [isUserCopied, setIsUserCopied] = useState(false);
   const { originalText, result } = turn;
 
   const handleCopyAnswer = () => {
     navigator.clipboard.writeText(result.compressed_text);
     setIsCopied(true);
     setTimeout(() => setIsCopied(false), 2000);
+  };
+
+  const handleCopyUserText = () => {
+    navigator.clipboard.writeText(originalText);
+    setIsUserCopied(true);
+    setTimeout(() => setIsUserCopied(false), 2000);
   };
 
   return (
@@ -50,18 +57,14 @@ function ChatTurnItem({ turn }: { turn: ChatTurnType }) {
           <button 
             className={styles.iconBtn} 
             title="Copy text"
-            onClick={() => navigator.clipboard.writeText(originalText)}
+            onClick={handleCopyUserText}
+            style={{
+              color: isUserCopied ? '#22c55e' : 'var(--text-secondary)',
+              transition: 'all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)',
+              transform: isUserCopied ? 'scale(1.2)' : 'scale(1)',
+            }}
           >
-            <Copy size={14}/>
-          </button>
-          {/* Note: In a full app, Edit might scroll down and populate the chat box.
-              For now, we'll just copy it to the clipboard as well so they can paste it to edit. */}
-          <button 
-            className={styles.iconBtn} 
-            title="Copy for editing"
-            onClick={() => navigator.clipboard.writeText(originalText)}
-          >
-            <Edit2 size={14}/>
+            {isUserCopied ? <Check size={14} /> : <Copy size={14} />}
           </button>
         </div>
       </div>
@@ -208,6 +211,7 @@ function ChatTurnItem({ turn }: { turn: ChatTurnType }) {
 
 export default function ResultView({ chatHistory, onSubmit, isLoading, pendingUserText }: ResultViewProps) {
   const [chatInput, setChatInput] = useState('');
+  const [isPendingCopied, setIsPendingCopied] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -236,15 +240,18 @@ export default function ResultView({ chatHistory, onSubmit, isLoading, pendingUs
                   <div className={styles.userActions}>
                     <button 
                       className={styles.iconBtn}
-                      onClick={() => navigator.clipboard.writeText(pendingUserText)}
+                      onClick={() => {
+                        navigator.clipboard.writeText(pendingUserText);
+                        setIsPendingCopied(true);
+                        setTimeout(() => setIsPendingCopied(false), 2000);
+                      }}
+                      style={{
+                        color: isPendingCopied ? '#22c55e' : 'var(--text-secondary)',
+                        transition: 'all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)',
+                        transform: isPendingCopied ? 'scale(1.2)' : 'scale(1)',
+                      }}
                     >
-                      <Copy size={14}/>
-                    </button>
-                    <button 
-                      className={styles.iconBtn}
-                      onClick={() => navigator.clipboard.writeText(pendingUserText)}
-                    >
-                      <Edit2 size={14}/>
+                      {isPendingCopied ? <Check size={14} /> : <Copy size={14}/>}
                     </button>
                   </div>
                 </div>
@@ -268,7 +275,7 @@ export default function ResultView({ chatHistory, onSubmit, isLoading, pendingUs
 
       <div className={styles.bottomChatContainer}>
         <div className={styles.chatInputWrapper}>
-          <div className={styles.chatInputInner}>
+          <div className={`${styles.chatInputInner} ${isLoading ? styles.loading : ''}`}>
             <textarea
               ref={textareaRef}
               className={styles.chatInput}
@@ -279,36 +286,35 @@ export default function ResultView({ chatHistory, onSubmit, isLoading, pendingUs
                 e.target.style.height = 'auto';
                 e.target.style.height = `${e.target.scrollHeight}px`;
               }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  if (!isLoading && chatInput.trim()) {
+                    onSubmit(chatInput, []);
+                    setChatInput('');
+                    if (textareaRef.current) {
+                      textareaRef.current.style.height = 'auto';
+                    }
+                  }
+                }
+              }}
               rows={1}
             />
 
-            <div className={styles.inputFooter}>
-              <div className={styles.leftActions}>
-                <button 
-                  type="button" 
-                  className={styles.actionBtn}
-                  onClick={() => alert('Advanced compression options coming soon!')}
-                >
-                  <SettingsIcon size={16} />
-                  <span>Options</span>
-                </button>
-              </div>
-              
-              <button 
-                type="button" 
-                className={styles.submitBtn} 
-                disabled={isLoading || !chatInput.trim()}
-                onClick={() => {
-                  onSubmit(chatInput, []);
-                  setChatInput('');
-                  if (textareaRef.current) {
-                    textareaRef.current.style.height = 'auto';
-                  }
-                }}
-              >
-                <Send size={18} />
-              </button>
-            </div>
+            <button 
+              type="button" 
+              className={styles.submitBtn} 
+              disabled={isLoading || !chatInput.trim()}
+              onClick={() => {
+                onSubmit(chatInput, []);
+                setChatInput('');
+                if (textareaRef.current) {
+                  textareaRef.current.style.height = 'auto';
+                }
+              }}
+            >
+              {isLoading ? <Loader2 size={18} className={styles.spinner} /> : <ArrowUp size={18} />}
+            </button>
           </div>
         </div>
       </div>

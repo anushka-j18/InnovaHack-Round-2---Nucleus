@@ -1,7 +1,10 @@
+'use client'
 import React, { useState, useRef, useEffect } from 'react';
-import { User, Clock, Settings, CreditCard, LogOut, ChevronDown, Activity, Shield, Moon, Sun, Bell, HelpCircle, ExternalLink, X, FileText } from 'lucide-react';
+import { User as UserIcon, Clock, Settings, CreditCard, LogOut, ChevronDown, Activity, Shield, Moon, Sun, Bell, HelpCircle, ExternalLink, X, FileText } from 'lucide-react';
 import styles from './TopNav.module.css';
 import { CompressionResult } from '@/lib/api';
+import { createClient } from '@/utils/supabase/client';
+import { useRouter } from 'next/navigation';
 
 interface ChatTurn {
   originalText: string;
@@ -22,8 +25,24 @@ export default function TopNav({ onReset, chatHistory = [], onSelectHistory }: T
   const [isDark, setIsDark] = useState(true);
   const [notifications, setNotifications] = useState(true);
   const [showToast, setShowToast] = useState<string | null>(null);
+  const [userData, setUserData] = useState<{ email?: string, name?: string } | null>(null);
   const popupRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
+  const supabase = createClient();
+  const router = useRouter();
+
+  useEffect(() => {
+    async function getUser() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        setUserData({
+          email: user.email,
+          name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'User'
+        });
+      }
+    }
+    getUser();
+  }, []);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -52,11 +71,13 @@ export default function TopNav({ onReset, chatHistory = [], onSelectHistory }: T
     setActivePanel(activePanel === panel ? null : panel);
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     setIsProfileOpen(false);
     setActivePanel(null);
+    await supabase.auth.signOut();
     toast('Logged out successfully');
     onReset?.();
+    router.push('/login');
   };
 
   const handleHistoryClick = (index: number) => {
@@ -92,7 +113,7 @@ export default function TopNav({ onReset, chatHistory = [], onSelectHistory }: T
             onClick={() => { setIsProfileOpen(!isProfileOpen); setActivePanel(null); }}
           >
             <div className={styles.avatarCircle}>
-              <User size={13} strokeWidth={2.5} />
+              <UserIcon size={13} strokeWidth={2.5} />
             </div>
             <ChevronDown size={13} className={`${styles.chevron} ${isProfileOpen ? styles.chevronUp : ''}`} />
           </button>
@@ -102,11 +123,11 @@ export default function TopNav({ onReset, chatHistory = [], onSelectHistory }: T
               {/* User card */}
               <div className={styles.userCard}>
                 <div className={styles.userAvatar}>
-                  <User size={18} strokeWidth={2} />
+                  <UserIcon size={18} strokeWidth={2} />
                 </div>
                 <div className={styles.userMeta}>
-                  <span className={styles.userName}>Guest User</span>
-                  <span className={styles.userEmail}>guest@nucleus.io</span>
+                  <span className={styles.userName}>{userData?.name || 'Guest User'}</span>
+                  <span className={styles.userEmail}>{userData?.email || 'guest@nucleus.io'}</span>
                 </div>
               </div>
 

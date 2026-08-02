@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   CheckCircle2, FileText, Cpu, Sparkles, ChevronRight,
-  Database, Scissors, ShieldCheck, X, Server
+  Database, Scissors, ShieldCheck, X, Server, Loader2
 } from 'lucide-react';
 import { CompressionResult } from '@/lib/api';
 
@@ -581,17 +581,25 @@ function TraceView({ isStatic, activeStage, tokens, chunks = [], semanticGroups 
               <span>Validation & Cost Analysis</span>
             </div>
             <div style={terminalStyle}>
-              <p style={logGreen}>✓ Preserved APIs & Entities</p>
-              <p style={logGreen}>✓ Semantic Similarity: 98.8% PASS</p>
+              <p style={result ? logGreen : { ...logGreen, opacity: 0.5 }} className="flex items-center gap-2">
+                {result ? '✓ Preserved APIs & Entities' : <><Loader2 size={14} className="animate-spin" /> Validating APIs & Entities</>}
+              </p>
+              <p style={result ? logGreen : { ...logGreen, opacity: 0.5 }} className="flex items-center gap-2">
+                {result 
+                  ? (result.accuracy_retained !== undefined && result.accuracy_retained !== null 
+                      ? `✓ Semantic Similarity: ${result.accuracy_retained.toFixed(1)}% PASS`
+                      : '✓ Semantic Validation: Skipped (No QA Provided)')
+                  : <><Loader2 size={14} className="animate-spin" /> Analyzing Semantic Similarity</>}
+              </p>
             </div>
             <div style={metricsRow}>
               <div style={metricBox}>
                 <div style={metricLabel}>Compression</div>
-                <div style={metricValue}>{(result?.compression_ratio as number)?.toFixed(1) || '31.0'}%</div>
+                <div style={metricValue}>{result ? `${(result.compression_ratio).toFixed(1)}%` : <Loader2 size={20} className="animate-spin opacity-50" />}</div>
               </div>
               <div style={metricBox}>
                 <div style={metricLabel}>Cost Saved</div>
-                <div style={metricValue}>${(result?.cost_saved_usd as number)?.toFixed(4) || '0.0140'}</div>
+                <div style={metricValue}>{result ? `$${(result.cost_saved_usd).toFixed(4)}` : <Loader2 size={20} className="animate-spin opacity-50" />}</div>
               </div>
             </div>
           </motion.div>
