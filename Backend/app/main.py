@@ -56,6 +56,7 @@ request_history = {}
 # In-memory dictionary cache with max size 100
 COMPRESSION_CACHE = {}
 MAX_CACHE_SIZE = 100
+RUN_TRACES = {}
 
 # In-memory metrics history
 METRICS_HISTORY = []
@@ -185,6 +186,26 @@ async def compress_endpoint(req: CompressRequest):
             f"({result['compression_ratio']}% reduction) | cost_saved=${cost_saved_usd:.6f}"
         )
         
+        # Generate unique run ID
+        run_id = f"run_{int(time.time() * 1000)}"
+        
+        # Save full untruncated trace log
+        RUN_TRACES[run_id] = result.get("compression_trace", [])
+        
+        # Clone trace for main response and truncate long lists
+        response_trace = []
+        for stage in result.get("compression_trace", []):
+            items = stage.get("removed_items")
+            if items and len(items) > 10:
+                items = items[:10] + [f"... and {len(items)-10} more items"]
+            response_trace.append({
+                "stage": stage["stage"],
+                "description": stage["description"],
+                "removed_items": items,
+                "tokens_before": stage["tokens_before"],
+                "tokens_after": stage["tokens_after"]
+            })
+            
         response = CompressResponse(
             compressed_text=result["compressed_text"],
             raw_tokens=result["raw_tokens"],
@@ -201,7 +222,8 @@ async def compress_endpoint(req: CompressRequest):
             structured_diff=result["structured_diff"],
             validation_details=validation_details,
             stage_breakdown=result["stage_breakdown"],
-            compression_trace=result.get("compression_trace")
+            compression_trace=response_trace,
+            run_id=run_id
         )
         
         # Save to Cache
@@ -213,6 +235,7 @@ async def compress_endpoint(req: CompressRequest):
         # Save to Metrics History
         run_metrics = {
             "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "run_id": run_id,
             "raw_tokens": result["raw_tokens"],
             "compressed_tokens": result["compressed_tokens"],
             "compression_ratio": result["compression_ratio"],
@@ -220,7 +243,15 @@ async def compress_endpoint(req: CompressRequest):
             "cost_saved_usd": cost_saved_usd,
             "latency_speedup_ratio": latency_speedup,
             "latency_speedup_is_estimated": latency_speedup_is_estimated,
-            "provider_used": provider_used or "mock"
+            "provider_used": provider_used or "mock",
+            "trace_summary": [
+                {
+                    "stage": s["stage"],
+                    "tokens_before": s["tokens_before"],
+                    "tokens_after": s["tokens_after"]
+                }
+                for s in result.get("compression_trace", [])
+            ]
         }
         METRICS_HISTORY.append(run_metrics)
         if len(METRICS_HISTORY) > MAX_METRICS_HISTORY:
@@ -247,7 +278,7 @@ async def compress_conversation_endpoint(req: ConversationCompressRequest):
         
         if req.redact_pii:
             from app.compressor import redact_pii_content
-            new_msg = redact_pii_content(new_msg)
+            new_msg, _ = redact_pii_content(new_msg)
             
         if session_id not in CONVERSATION_SESSIONS:
             CONVERSATION_SESSIONS[session_id] = []
@@ -271,6 +302,8 @@ async def compress_conversation_endpoint(req: ConversationCompressRequest):
                 compressed_context=full_context,
                 compressed_tokens=raw_tokens,
                 compression_ratio=0.0,
+                compression_ratio_turn=0.0,
+                compression_ratio_session=0.0,
                 cost_saved_usd=0.0,
                 plain_english_summary="All turns within verbatim window; no compression performed."
             )
@@ -319,6 +352,8 @@ async def compress_conversation_endpoint(req: ConversationCompressRequest):
             compressed_context=final_context,
             compressed_tokens=final_tokens,
             compression_ratio=ratio,
+            compression_ratio_turn=comp_res["compression_ratio"],
+            compression_ratio_session=ratio,
             cost_saved_usd=cost_saved_usd,
             plain_english_summary=summary
         )
@@ -329,6 +364,15 @@ async def compress_conversation_endpoint(req: ConversationCompressRequest):
             status_code=500,
             detail="Internal Server Error. Please check backend server logs for details."
         )
+
+@app.get("/compress/{run_id}/trace")
+async def get_run_trace(run_id: str):
+    if run_id not in RUN_TRACES:
+        raise HTTPException(status_code=404, detail="Trace not found for the specified run ID.")
+    return {
+        "run_id": run_id,
+        "compression_trace": RUN_TRACES[run_id]
+    }
 
 @app.get("/metrics")
 async def get_metrics():
@@ -347,6 +391,23 @@ async def health():
     model_instance = get_model()
     offline_mode = (model_instance.__class__.__name__ == "MockModel")
     
+    import os
+    is_docker = os.getenv("DOCKER_ENV", "false").lower() == "true"
+    
+    if is_docker and offline_mode:
+        return JSONResponse(
+            status_code=503,
+            content={
+                "status": "unhealthy_offline_fallback",
+                "python_version": sys.version,
+                "cuda_available": cuda_available,
+                "gpu_device": device_name,
+                "pytorch_version": pytorch_version,
+                "offline_mode": offline_mode,
+                "detail": "Embedding model failed to pre-warm in container deployment."
+            }
+        )
+        
     return {
         "status": "ok",
         "python_version": sys.version,

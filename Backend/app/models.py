@@ -56,6 +56,7 @@ class CompressResponse(BaseModel):
     validation_details: Optional[List[QAValidationDetail]] = Field(None, description="Side-by-side Q&A answers for validation inspectability")
     stage_breakdown: Optional[List[StageBreakdown]] = Field(None, description="Compression progress tokens breakdown stage-by-stage")
     compression_trace: Optional[List[CompressionStage]] = Field(None, description="Structured stage-by-stage log tracking token changes and removed items")
+    run_id: Optional[str] = Field(None, description="Unique identifier generated for this compression run execution")
 
 class ConversationCompressRequest(BaseModel):
     session_id: str = Field(..., description="Unique conversation session identifier")
@@ -70,6 +71,8 @@ class ConversationCompressResponse(BaseModel):
     full_history_raw_tokens: int = Field(..., description="Token count of raw running history")
     compressed_context: str = Field(..., description="The compressed prompt context representing the conversation history")
     compressed_tokens: int = Field(..., description="Token count of the compressed history")
-    compression_ratio: float = Field(..., description="Percentage reduction in conversation tokens")
+    compression_ratio: float = Field(..., description="Cumulative percentage reduction in conversation tokens")
+    compression_ratio_turn: Optional[float] = Field(None, description="Percentage reduction achieved on this specific turn's older history")
+    compression_ratio_session: Optional[float] = Field(None, description="Cumulative percentage reduction of the entire running history context")
     cost_saved_usd: float = Field(..., description="Estimated cost savings in USD")
     plain_english_summary: str = Field(..., description="Plain-English summary of conversation compression")

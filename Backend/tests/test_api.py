@@ -194,6 +194,10 @@ def test_conversation_rolling_endpoint():
     assert "compressed_context" in res_json
     assert "compressed_tokens" in res_json
     assert "Turn 4 response" in res_json["compressed_context"]
+    assert "compression_ratio_turn" in res_json
+    assert "compression_ratio_session" in res_json
+    assert isinstance(res_json["compression_ratio_turn"], float)
+    assert isinstance(res_json["compression_ratio_session"], float)
 
 def test_health_check_offline_mode():
     """Verify endpoint /health reports offline_mode status."""
@@ -213,6 +217,9 @@ def test_compress_compression_trace():
     assert response.status_code == 200
     res_json = response.json()
     assert "compression_trace" in res_json
+    assert "run_id" in res_json
+    
+    run_id = res_json["run_id"]
     trace = res_json["compression_trace"]
     
     stages = [stage["stage"] for stage in trace]
@@ -225,3 +232,10 @@ def test_compress_compression_trace():
         assert "description" in stage
         assert "tokens_before" in stage
         assert "tokens_after" in stage
+        
+    # Check that trace endpoint fetches the untruncated log by run_id
+    trace_res = client.get(f"/compress/{run_id}/trace")
+    assert trace_res.status_code == 200
+    trace_json = trace_res.json()
+    assert trace_json["run_id"] == run_id
+    assert isinstance(trace_json["compression_trace"], list)
