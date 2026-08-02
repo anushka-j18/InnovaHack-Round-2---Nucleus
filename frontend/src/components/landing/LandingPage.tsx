@@ -59,8 +59,8 @@ export default function LandingPage() {
       }
 
       // 4. Reveal Animations for Bento Grid
-      const bentoItems = gsap.utils.toArray('.bento-reveal');
-      bentoItems.forEach((item: HTMLElement | Element | string | object | null) => {
+      const bentoItems = gsap.utils.toArray('.bento-reveal') as HTMLElement[];
+      bentoItems.forEach((item) => {
         gsap.fromTo(item,
           { opacity: 0, y: 50, scale: 0.95 },
           {
@@ -77,7 +77,8 @@ export default function LandingPage() {
 
       // 5. Interactive 3D Tilt for Bento Cards
       const bentoCards = document.querySelectorAll('.bento-card-interactive');
-      bentoCards.forEach(card => {
+      bentoCards.forEach((cardElement) => {
+        const card = cardElement as HTMLElement;
         card.addEventListener('mousemove', (e: MouseEvent) => {
           const rect = card.getBoundingClientRect();
           const x = e.clientX - rect.left;
