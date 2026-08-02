@@ -6,37 +6,39 @@ I have completed the implementation of all requested enhancements and fixes. All
 
 ## 🛠️ Key Improvements & New Features
 
-### 1. Lazy Trace Retrievability (`GET /compress/{run_id}/trace`)
-- Exposes a new `GET /compress/{run_id}/trace` endpoint to retrieve full, untruncated stage logs using a unique `run_id` generated during each request.
-- Prevents bloat on `/compress` response bodies by truncating lists exceeding 10 items (returning a `... and N more items` suffix) while maintaining a complete log in memory.
+### 1. Robust SQLite Persistence & Eviction
+- Replaced all raw in-memory caches, metrics lists, conversation sessions, and traces with a thread-safe **SQLite database** (`cache/nucleus.db`).
+- Built clean size-capped eviction queries directly into `app/database.py` that automatically pop the oldest rows when any table exceeds 100 entries.
 
-### 2. Docker build-time Model Pre-Caching
-- Integrated `python scripts/download_cache.py` directly into the `Dockerfile` build step. This downloads and pre-warms the tiktoken and SentenceTransformer model weights during image creation, silencing startup warnings and latency spikes on startup.
+### 2. O(N) Linear-Time Conversation History Compression
+- Refactored `/compress/conversation` to store and reuse `compressed_older_context` inside the database session record.
+- When new turns slide out of the verbatim window, the backend runs compression *only* on the previously compressed older context combined with the newly aged-out turns. This converts conversation scaling complexity from quadratic $O(n^2)$ down to linear $O(n)$!
 
-### 3. Detailed Token Accounting per Turn
-- Updated `/compress/conversation` to return distinct metrics for granular inspection:
-  - `compression_ratio`: The total cumulative session savings ratio.
-  - `compression_ratio_turn`: The percentage reduction achieved purely on the older history subsets of the active turn.
-  - `compression_ratio_session`: The overall percentage context reduction of the active history window.
+### 3. Concurrency Safety Locks
+- Protected any mutable state write operations and SQLite queries using `asyncio.Lock()` mutex locks (`db_lock`, `limiter_lock`) to guarantee race condition protection.
 
-### 4. Docker Healthcheck Real Readiness
-- Standardized the Dockerfile's `HEALTHCHECK` to execute HTTP calls directly against `/health`.
-- If the embedding model fails to warm up inside the Docker container, the `/health` endpoint responds with a `503 Service Unavailable` status, flagging the container status as unhealthy.
+### 4. API Authentication Security (`X-API-Key`)
+- Configured a new environment variable `NUCLEUS_API_KEY`. If configured, all incoming endpoints validate the request against the `X-API-Key` header, raising `401 Unauthorized` on mismatch.
+
+### 5. Correlation Request ID Logging
+- Implemented structured request logging using unique Request IDs (generated or passed as `X-Request-ID` headers). Logging output maps `[Request ID: xxxxxxxx]` across checks, compression, and validation traces.
+
+### 6. GitHub Actions CI/CD Pipeline
+- Added `.github/workflows/ci.yml` triggering Python unit tests on every pull request and branch push.
 
 ---
 
 ## 📊 Automated Verification Output
 
-Running the Pytest test suite inside the `Backend` directory compiles and passes all **22 tests** successfully:
+Running the Pytest test suite inside the `Backend` directory compiles and passes all **27 tests** successfully:
 ```
-================== 22 passed, 1 warning in 126.35s ==================
+================== 27 passed, 1 warning in 104.49s ==================
 ```
 
 The multimodal validation pipeline outputs a successful status indicating **100% accuracy retention**:
 ```yaml
-2026-08-02 11:36:41,562 [INFO] nucleus.validator: -> Match Score: 100.0%
-2026-08-02 11:36:41,562 [INFO] nucleus.verify_pipeline: Accuracy Retained:   100.0%
-2026-08-02 11:36:41,562 [INFO] nucleus.verify_pipeline: Validation Provider: groq
-2026-08-02 11:36:41,562 [INFO] nucleus.verify_pipeline: Latency Speedup:     1.08x
-2026-08-02 11:36:41,562 [INFO] nucleus.verify_pipeline: OVERALL PIPELINE STATUS: VERIFIED SUCCESSFUL
+2026-08-02 11:58:23,930 [INFO] nucleus.verify_pipeline: Accuracy Retained:   100.0%
+2026-08-02 11:58:23,930 [INFO] nucleus.verify_pipeline: Validation Provider: groq
+2026-08-02 11:58:23,930 [INFO] nucleus.verify_pipeline: Latency Speedup:     1.03x
+2026-08-02 11:58:23,930 [INFO] nucleus.verify_pipeline: OVERALL PIPELINE STATUS: VERIFIED SUCCESSFUL
 ```
