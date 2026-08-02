@@ -198,7 +198,7 @@ export default function LandingPage() {
       <section className="relative z-10 w-full min-h-screen flex flex-col pt-8 px-6 sm:px-12">
         {/* Nav */}
         <nav className="flex justify-between items-center w-full max-w-[1400px] mx-auto hero-fade">
-          <Image src="/logo/nucleus-white.png" alt="Nucleus Logo" width={140} height={40} className="h-6 w-auto opacity-80" />
+          <Image src="/logo/nucleus-white-bgr.png" alt="Nucleus Logo" width={140} height={40} className="h-6 w-auto opacity-80" />
           <Link href="/app" className="px-6 py-2 rounded-full border border-white/20 bg-white/5 hover:bg-white/10 transition-colors text-xs tracking-widest uppercase font-medium backdrop-blur-md">
             Launch App
           </Link>
