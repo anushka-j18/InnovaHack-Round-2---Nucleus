@@ -35,6 +35,9 @@ def get_model():
             
         try:
             import torch
+            import os
+            os.environ["OMP_NUM_THREADS"] = "1"
+            torch.set_num_threads(1)
             device = "cpu"
             if torch.cuda.is_available():
                 device = "cuda"

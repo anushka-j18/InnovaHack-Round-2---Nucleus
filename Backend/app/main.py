@@ -4,6 +4,8 @@ import logging
 import traceback
 import asyncio
 import uuid
+import os
+os.environ["MALLOC_ARENA_MAX"] = "2"
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
