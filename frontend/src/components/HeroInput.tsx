@@ -46,12 +46,12 @@ export default function HeroInput({ onSubmit, isLoading }: HeroInputProps) {
           <textarea
             ref={textareaRef}
             className={styles.textarea}
-            placeholder="Paste your long codebase, logs, or text here (up to 50k characters)..."
+            placeholder="Paste your long codebase, logs, or text here (up to 5k characters)..."
             value={text}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={handleKeyDown}
             disabled={isLoading}
-            maxLength={50000}
+            maxLength={5000}
             rows={1}
           />
           

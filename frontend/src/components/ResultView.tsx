@@ -279,7 +279,8 @@ export default function ResultView({ chatHistory, onSubmit, isLoading, pendingUs
             <textarea
               ref={textareaRef}
               className={styles.chatInput}
-              placeholder="Paste your long codebase, logs, or text here (up to 50k characters)..."
+              placeholder="Paste your long codebase, logs, or text here (up to 5k characters)..."
+              maxLength={5000}
               value={chatInput}
               onChange={(e) => {
                 setChatInput(e.target.value);
