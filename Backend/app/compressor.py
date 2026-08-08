@@ -14,6 +14,23 @@ def get_model():
     """
     global _model
     if _model is None:
+        import os
+        force_mock = os.getenv("FORCE_MOCK_MODEL", "false").lower() == "true"
+        
+        if force_mock:
+            print("[Nucleus Backend] FORCE_MOCK_MODEL is true. Bypassing PyTorch/SentenceTransformers.")
+            class MockModel:
+                def encode(self, sentences, **kwargs):
+                    import random
+                    fake_embs = []
+                    for s in sentences:
+                        val = sum(ord(c) * (i + 1) for i, c in enumerate(s))
+                        random.seed(val)
+                        fake_embs.append([random.uniform(-1.0, 1.0) for _ in range(384)])
+                    return fake_embs
+            _model = MockModel()
+            return _model
+            
         try:
             import torch
             device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -179,7 +196,8 @@ def dedup_chunks(chunks: list[dict], threshold: float = SIMILARITY_THRESHOLD) ->
             uncached_indices.append(idx)
             
     if uncached_texts:
-        raw_embs = model.encode(uncached_texts)
+        # Reduced batch_size to 4 to prevent Out of Memory (OOM) errors on 512MB RAM servers
+        raw_embs = model.encode(uncached_texts, batch_size=4)
         for raw_idx, emb in enumerate(raw_embs):
             orig_idx = uncached_indices[raw_idx]
             emb_list = emb.tolist() if hasattr(emb, "tolist") else list(emb)
