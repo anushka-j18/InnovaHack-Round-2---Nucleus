@@ -114,7 +114,11 @@ async def rate_limit_middleware(request: Request, call_next):
     request.state.request_id = request_id
     
     if request.url.path.startswith("/compress"):
-        client_ip = request.client.host if request.client else "unknown"
+        forwarded = request.headers.get("X-Forwarded-For")
+        if forwarded:
+            client_ip = forwarded.split(",")[0].strip()
+        else:
+            client_ip = request.headers.get("CF-Connecting-IP") or (request.client.host if request.client else "unknown")
         now = time.time()
         
         async with limiter_lock:
@@ -142,6 +146,15 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.error(f"Unhandled exception: {exc}")
+    logger.error(traceback.format_exc())
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal Server Error"}
+    )
 
 @app.post("/compress", response_model=CompressResponse)
 async def compress_endpoint(req: CompressRequest, request: Request):
