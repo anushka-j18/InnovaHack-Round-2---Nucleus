@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Target, Copy, Edit2, Code, Settings as SettingsIcon, Send, Check, CheckCircle2, Zap, DollarSign, ArrowUp, Loader2 } from 'lucide-react';
+import { Target, Copy, Code, Check, CheckCircle2, Zap, DollarSign, ArrowUp, Loader2 } from 'lucide-react';
 import styles from './ResultView.module.css';
 
 import AIPipeline, { CompressionGraph } from './AIPipeline';

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Settings, CheckCircle2, FileText, Code, ArrowUp, Loader2 } from 'lucide-react';
+import { Settings, CheckCircle2, FileText, Code, ArrowUp, Loader2 } from 'lucide-react';
 import styles from './HeroInput.module.css';
 
 interface HeroInputProps {
