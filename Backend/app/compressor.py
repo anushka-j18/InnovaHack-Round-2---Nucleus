@@ -15,40 +15,39 @@ def get_model():
     global _model
     if _model is None:
         import os
+        
+        class MockModel:
+            def encode(self, sentences, **kwargs):
+                import random
+                fake_embs = []
+                for s in sentences:
+                    val = sum(ord(c) * (i + 1) for i, c in enumerate(s))
+                    random.seed(val)
+                    fake_embs.append([random.uniform(-1.0, 1.0) for _ in range(384)])
+                return fake_embs
+                
         force_mock = os.getenv("FORCE_MOCK_MODEL", "false").lower() == "true"
         
         if force_mock:
             print("[Nucleus Backend] FORCE_MOCK_MODEL is true. Bypassing PyTorch/SentenceTransformers.")
-            class MockModel:
-                def encode(self, sentences, **kwargs):
-                    import random
-                    fake_embs = []
-                    for s in sentences:
-                        val = sum(ord(c) * (i + 1) for i, c in enumerate(s))
-                        random.seed(val)
-                        fake_embs.append([random.uniform(-1.0, 1.0) for _ in range(384)])
-                    return fake_embs
             _model = MockModel()
             return _model
             
         try:
             import torch
-            device = "cuda" if torch.cuda.is_available() else "cpu"
+            if torch.cuda.is_available():
+                device = "cuda"
+            elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+                device = "mps"
+            else:
+                device = "cpu"
+                
             print(f"[Nucleus Backend] Loading embedding model on device: {device}")
             from sentence_transformers import SentenceTransformer
             _model = SentenceTransformer(EMBEDDING_MODEL_NAME, device=device)
         except Exception as e:
             print(f"[Nucleus Backend] Warning: Failed to load sentence-transformers/torch: {e}")
             # Mock fallback if package is loading/missing during testing or network failure
-            class MockModel:
-                def encode(self, sentences, **kwargs):
-                    import random
-                    fake_embs = []
-                    for s in sentences:
-                        val = sum(ord(c) * (i + 1) for i, c in enumerate(s))
-                        random.seed(val)
-                        fake_embs.append([random.uniform(-1.0, 1.0) for _ in range(384)])
-                    return fake_embs
             _model = MockModel()
     return _model
 
